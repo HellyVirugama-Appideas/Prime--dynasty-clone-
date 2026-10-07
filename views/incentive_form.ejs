@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+
+<head>
+    <%- include('_layouts/head') %>
+    <title><%= title %> | Dynasty</title>
+
+    <style>
+        .field-label { display: block; font-size: 0.8rem; color: #9e9e9e; margin-bottom: 4px; }
+        select.browser-default { height: 2.6rem; border: none; border-bottom: 1px solid #9e9e9e; background: transparent; border-radius: 0; }
+        .tier-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 6px; }
+        .tier-row .input-field { margin: 0; flex: 1; }
+        .section-title { font-weight: 700; margin: 18px 0 6px; color: #c62828; }
+        .hint { font-size: 0.78rem; color: #888; margin: 2px 0 10px; }
+        .day-check { display: inline-block; margin-right: 14px; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <%
+        const f = formData || {};
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const checkedDays = (f.daysOfWeek || []).map(Number);
+        const tiers = (f.tiers && f.tiers.length) ? f.tiers : [{ target: '', reward: '' }];
+        const action = isEdit ? '/admin/incentives/edit/' + incentiveId : '/admin/incentives/add';
+    %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0"><%= title %></h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item"><a href="/admin/incentives">Incentives & Bonus</a></li>
+                                <li class="breadcrumb-item active"><%= isEdit ? 'Edit' : 'Add' %></li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12">
+                            <div class="card">
+                                <div class="card-content">
+                                    <%- messages('messages', locals) %>
+
+                                    <form action="<%= action %>" method="POST" id="incentiveForm">
+
+                                        <div class="section-title">1. Where & what</div>
+                                        <div class="row">
+                                            <div class="col s12 m4">
+                                                <label class="field-label" for="period">App tab *</label>
+                                                <select class="browser-default" id="period" name="period" required>
+                                                    <option value="daily" <%= f.period === 'daily' ? 'selected' : '' %>>Daily</option>
+                                                    <option value="weekly" <%= f.period === 'weekly' ? 'selected' : '' %>>Weekly</option>
+                                                    <option value="bonus" <%= f.period === 'bonus' ? 'selected' : '' %>>Bonus</option>
+                                                </select>
+                                            </div>
+                                            <div class="col s12 m4">
+                                                <label class="field-label" for="metric">What to count *</label>
+                                                <select class="browser-default" id="metric" name="metric" required>
+                                                    <option value="rides" <%= f.metric === 'rides' ? 'selected' : '' %>>Completed rides</option>
+                                                    <option value="distance" <%= f.metric === 'distance' ? 'selected' : '' %>>Distance driven</option>
+                                                    <option value="days" id="optDays" <%= f.metric === 'days' ? 'selected' : '' %>>Active days (weekly only)</option>
+                                                </select>
+                                            </div>
+                                            <div class="col s12 m2 only-distance">
+                                                <label class="field-label" for="distanceUnit">Distance unit</label>
+                                                <select class="browser-default" id="distanceUnit" name="distanceUnit">
+                                                    <option value="km" <%= f.distanceUnit !== 'mi' ? 'selected' : '' %>>Kilometres</option>
+                                                    <option value="mi" <%= f.distanceUnit === 'mi' ? 'selected' : '' %>>Miles</option>
+                                                </select>
+                                            </div>
+                                            <div class="input-field col s12 m2 only-days">
+                                                <input id="minRidesPerDay" type="number" min="1" name="minRidesPerDay" value="<%= f.minRidesPerDay || 1 %>">
+                                                <label for="minRidesPerDay" class="active">Min rides per day</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="section-title">2. Texts shown in the app</div>
+                                        <div class="row">
+                                            <div class="input-field col s12 m4">
+                                                <input id="title" type="text" name="title" value="<%= f.title || '' %>" placeholder="Auto: Earn up to ...">
+                                                <label for="title" class="active">Card title (optional)</label>
+                                            </div>
+                                            <div class="input-field col s12 m5">
+                                                <input id="description" type="text" name="description" value="<%= f.description || '' %>" placeholder="Auto: by completing 20 rides in a day">
+                                                <label for="description" class="active">Sub text (optional)</label>
+                                            </div>
+                                            <div class="input-field col s12 m3">
+                                                <input id="bonusName" type="text" name="bonusName" value="<%= f.bonusName || '' %>" placeholder="Daily Bonus / Flash Bonus">
+                                                <label for="bonusName" class="active">Bonus name (history)</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="section-title">3. When</div>
+                                        <div class="row">
+                                            <div class="input-field col s12 m3">
+                                                <input id="validFrom" type="date" name="validFrom" value="<%= f.validFrom || '' %>" required>
+                                                <label for="validFrom" class="active">Valid from *</label>
+                                            </div>
+                                            <div class="input-field col s12 m3">
+                                                <input id="validTo" type="date" name="validTo" value="<%= f.validTo || '' %>" required>
+                                                <label for="validTo" class="active">Valid to *</label>
+                                            </div>
+                                            <div class="input-field col s12 m3">
+                                                <input id="timeWindowStart" type="time" name="timeWindowStart" value="<%= f.timeWindowStart || '' %>">
+                                                <label for="timeWindowStart" class="active">Time window start</label>
+                                            </div>
+                                            <div class="input-field col s12 m3">
+                                                <input id="timeWindowEnd" type="time" name="timeWindowEnd" value="<%= f.timeWindowEnd || '' %>">
+                                                <label for="timeWindowEnd" class="active">Time window end</label>
+                                            </div>
+                                        </div>
+                                        <p class="hint">Time window optional hai. Set karoge to sirf us time me complete hui rides count hongi (jaise 06:00 AM - 09:00 AM).</p>
+
+                                        <div class="row only-daily">
+                                            <div class="col s12">
+                                                <span class="field-label">Show on these days (khaali = har din)</span>
+                                                <% days.forEach((d, i) => { %>
+                                                    <label class="day-check">
+                                                        <input type="checkbox" name="daysOfWeek" value="<%= i %>" <%= checkedDays.includes(i) ? 'checked' : '' %>>
+                                                        <span><%= d %></span>
+                                                    </label>
+                                                <% }) %>
+                                            </div>
+                                        </div>
+
+                                        <div class="section-title">4. Milestones (target → reward)</div>
+                                        <p class="hint" id="tierHint">Driver ko har milestone par uska reward milta hai. "Earn up to" amount sab rewards ka total hota hai.</p>
+
+                                        <div id="tierRows">
+                                            <% tiers.forEach(t => { %>
+                                            <div class="tier-row">
+                                                <div class="input-field">
+                                                    <input type="number" step="any" min="0.01" name="tierTarget" value="<%= t.target %>">
+                                                    <label class="active tier-target-label">Target</label>
+                                                </div>
+                                                <div class="input-field">
+                                                    <input type="number" step="any" min="0" name="tierReward" value="<%= t.reward %>">
+                                                    <label class="active">Reward amount</label>
+                                                </div>
+                                                <a href="javascript:void(0)" class="btn-flat red-text remove-tier"><i class="material-icons">delete</i></a>
+                                            </div>
+                                            <% }) %>
+                                        </div>
+                                        <a href="javascript:void(0)" id="addTier" class="btn-flat" style="color:#c62828;"><i class="material-icons left">add</i>Add milestone</a>
+
+                                        <div class="section-title">5. Other</div>
+                                        <div class="row">
+                                            <div class="input-field col s12 m3">
+                                                <input id="sortOrder" type="number" name="sortOrder" value="<%= f.sortOrder || 0 %>">
+                                                <label for="sortOrder" class="active">Sort order</label>
+                                            </div>
+                                            <div class="col s12 m3" style="padding-top:22px;">
+                                                <label>
+                                                    <input type="checkbox" name="isActive" <%= (f.isActive === undefined || f.isActive) ? 'checked' : '' %>>
+                                                    <span>Active</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div style="margin-top:18px;">
+                                            <button class="btn waves-effect waves-light" type="submit" style="background:#c62828;">
+                                                <%= isEdit ? 'Update' : 'Add' %> Incentive
+                                            </button>
+                                            <a href="/admin/incentives" class="btn grey">Cancel</a>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+
+    <script>
+        $(document).ready(function () {
+            function refresh() {
+                var period = $('#period').val();
+                var metric = $('#metric').val();
+
+                // "Active days" sirf weekly me
+                var daysOpt = $('#optDays');
+                if (period !== 'weekly') {
+                    daysOpt.prop('disabled', true);
+                    if (metric === 'days') { $('#metric').val('rides'); metric = 'rides'; }
+                } else {
+                    daysOpt.prop('disabled', false);
+                }
+
+                $('.only-distance').toggle(metric === 'distance');
+                $('.only-days').toggle(metric === 'days');
+                $('.only-daily').toggle(period === 'daily');
+
+                var unit = metric === 'rides' ? 'rides'
+                    : metric === 'days' ? 'days (max 7)'
+                    : ($('#distanceUnit').val() === 'mi' ? 'miles' : 'km');
+                $('.tier-target-label').text('Target (' + unit + ')');
+            }
+
+            $('#period, #metric, #distanceUnit').on('change', refresh);
+
+            function newRow() {
+                return '<div class="tier-row">' +
+                    '<div class="input-field"><input type="number" step="any" min="0.01" name="tierTarget">' +
+                    '<label class="active tier-target-label">Target</label></div>' +
+                    '<div class="input-field"><input type="number" step="any" min="0" name="tierReward">' +
+                    '<label class="active">Reward amount</label></div>' +
+                    '<a href="javascript:void(0)" class="btn-flat red-text remove-tier"><i class="material-icons">delete</i></a>' +
+                    '</div>';
+            }
+
+            $('#addTier').on('click', function () { $('#tierRows').append(newRow()); refresh(); });
+
+            $('#tierRows').on('click', '.remove-tier', function () {
+                if ($('#tierRows .tier-row').length > 1) $(this).closest('.tier-row').remove();
+                else $(this).closest('.tier-row').find('input').val('');
+            });
+
+            refresh();
+        });
+    </script>
+</body>
+
+</html>

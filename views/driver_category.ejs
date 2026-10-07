@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<head>
+    <%- include('_layouts/head') %>
+    <title>Driver Categories | <%= title %></title>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0"><span>Driver Categories ("List your car as")</span></h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="section">
+                        <%- messages('messages', locals) %>
+
+                        <div class="card">
+                            <div class="card-content">
+                                <span class="card-title"><%= edit ? 'Edit category: ' + edit.key : 'Add category' %></span>
+                                <form method="POST" action="/admin/driver-category" enctype="multipart/form-data">
+                                    <% if (edit) { %><input type="hidden" name="id" value="<%= edit._id %>"><% } %>
+                                    <div class="row">
+                                        <div class="input-field col m3 s12">
+                                            <input id="key" name="key" type="text" value="<%= edit ? edit.key : '' %>"
+                                                <%= edit ? 'readonly' : 'required' %>>
+                                            <label for="key" class="active">Key (e.g. rental, courier)</label>
+                                        </div>
+                                        <div class="input-field col m3 s12">
+                                            <input id="nameEn" name="nameEn" type="text" value="<%= edit ? edit.en.name : '' %>" required>
+                                            <label for="nameEn" class="active">Name (EN)</label>
+                                        </div>
+                                        <div class="input-field col m3 s12">
+                                            <input id="nameFr" name="nameFr" type="text" value="<%= edit ? edit.fr.name : '' %>">
+                                            <label for="nameFr" class="active">Name (FR)</label>
+                                        </div>
+                                        <div class="input-field col m3 s12">
+                                            <input id="nameAr" name="nameAr" type="text" value="<%= edit ? edit.ar.name : '' %>">
+                                            <label for="nameAr" class="active">Name (AR)</label>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="input-field col m3 s12">
+                                            <select name="typeFor" required>
+                                                <% ['Taxi','Bike','Delivery','Rental'].forEach(t => { %>
+                                                <option value="<%= t %>" <%= edit && edit.typeFor === t ? 'selected' : '' %>><%= t %></option>
+                                                <% }) %>
+                                            </select>
+                                            <label>Vehicle types shown for this category</label>
+                                        </div>
+                                        <div class="input-field col m3 s12">
+                                            <select name="group">
+                                                <option value="ride" <%= edit && edit.group === 'ride' ? 'selected' : '' %>>Ride (taxi/bike requests)</option>
+                                                <option value="rental" <%= edit && edit.group === 'rental' ? 'selected' : '' %>>Rental</option>
+                                                <option value="others" <%= !edit || edit.group === 'others' ? 'selected' : '' %>>Others</option>
+                                            </select>
+                                            <label>Group</label>
+                                        </div>
+                                        <div class="input-field col m2 s12">
+                                            <input id="sortOrder" name="sortOrder" type="number" value="<%= edit ? edit.sortOrder : 0 %>">
+                                            <label for="sortOrder" class="active">Sort order</label>
+                                        </div>
+                                        <div class="col m2 s12" style="padding-top:22px;">
+                                            <label>
+                                                <input type="checkbox" name="isActive" <%= !edit || edit.isActive ? 'checked' : '' %>>
+                                                <span>Active</span>
+                                            </label>
+                                        </div>
+                                        <div class="col m2 s12" style="padding-top:12px;">
+                                            <input type="file" name="image" accept="image/png,image/jpeg">
+                                        </div>
+                                    </div>
+                                    <button class="btn gradient-45deg-purple-deep-orange" type="submit"><%= edit ? 'Update' : 'Add' %></button>
+                                    <% if (edit) { %><a class="btn grey" href="/admin/driver-category">Cancel</a><% } %>
+                                </form>
+                                <p style="color:#888;margin-top:12px;">
+                                    Only <b>taxi</b> and <b>bike</b> drivers receive ride requests. Drivers in every other
+                                    category (rental, courier, ...) never get ride notifications.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-content">
+                                <table class="display">
+                                    <thead>
+                                        <tr><th>#</th><th>Key</th><th>Name</th><th>Vehicle types</th><th>Group</th><th>Order</th><th>Image</th><th>Status</th><th>Action</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <% categories.forEach((c, i) => { %>
+                                        <tr>
+                                            <td><%= i + 1 %></td>
+                                            <td><%= c.key %></td>
+                                            <td><%= c.en.name %></td>
+                                            <td><%= c.typeFor %></td>
+                                            <td><%= c.group %></td>
+                                            <td><%= c.sortOrder %></td>
+                                            <td><% if (c.image) { %><img src="<%= c.image %>" width="50"><% } %></td>
+                                            <td><%= c.isActive ? 'Active' : 'Disabled' %></td>
+                                            <td>
+                                                <a href="/admin/driver-category?edit=<%= c.id %>"><i class="material-icons">create</i></a>
+                                                <a href="/admin/driver-category/toggle/<%= c.id %>"><i class="material-icons"><%= c.isActive ? 'visibility_off' : 'visibility' %></i></a>
+                                            </td>
+                                        </tr>
+                                        <% }) %>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<head>
+    <%- include('_layouts/head') %>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Two+Tone" rel="stylesheet">
+    <title>Fare &amp; Trip Reports | <%= title %></title>
+    <style>
+        .stat-card { border-radius: 14px; padding: 20px; color: #fff; margin-bottom: 20px; }
+        .stat-card h3 { margin: 0; font-size: 1.6rem; font-weight: 700; }
+        .stat-card p { margin: 4px 0 0; opacity: .85; }
+        .stat-1 { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); }
+        .stat-2 { background: linear-gradient(135deg,#11998e 0%,#38ef7d 100%); }
+        .stat-3 { background: linear-gradient(135deg,#f7971e 0%,#ffd200 100%); color:#333; }
+        .trip-type-pill { display:inline-block; padding:3px 12px; border-radius:16px; font-weight:700; font-size:.78rem; color:#fff; }
+        .pill-short { background:#26a69a; }
+        .pill-medium { background:#ff9800; }
+        .pill-long { background:#e53935; }
+        .pill-unclassified { background:#9e9e9e; }
+        .range-tabs a { padding: 8px 18px; border-radius: 20px; margin-right: 8px; background:#f0f0f5; color:#555; font-weight:600; }
+        .range-tabs a.active { background:#7c4dff; color:#fff; }
+        .report-table th { color:#666; font-size:.85rem; text-transform: uppercase; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Fare &amp; Trip Reports</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item active">Fare Reports</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="container" style="margin-top:30px;">
+                <div class="row">
+                    <div class="col s12"><%- messages('messages', locals) %></div>
+                </div>
+
+                <div class="row range-tabs">
+                    <div class="col s12">
+                        <a href="/admin/fare-reports?range=daily" class="<%= range === 'daily' ? 'active' : '' %>">Daily</a>
+                        <a href="/admin/fare-reports?range=weekly" class="<%= range === 'weekly' ? 'active' : '' %>">Weekly</a>
+                        <a href="/admin/fare-reports?range=monthly" class="<%= range === 'monthly' ? 'active' : '' %>">Monthly</a>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col s12 m4">
+                        <div class="stat-card stat-1">
+                            <h3><%= grandTotalBookings %></h3>
+                            <p>Completed Bookings</p>
+                        </div>
+                    </div>
+                    <div class="col s12 m4">
+                        <div class="stat-card stat-2">
+                            <h3>$<%= grandTotalRevenue.toFixed(2) %></h3>
+                            <p>Total Revenue</p>
+                        </div>
+                    </div>
+                    <div class="col s12 m4">
+                        <div class="stat-card stat-3">
+                            <h3>$<%= grandTotalPlatformFee.toFixed(2) %></h3>
+                            <p>Platform Fee Earnings</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col s12">
+                        <div class="card" style="border-radius:14px;padding:22px;">
+                            <h6 style="font-weight:700;color:#444;margin-bottom:16px;">Trip-Type-Wise Breakdown</h6>
+                            <table class="report-table striped responsive-table">
+                                <thead>
+                                    <tr>
+                                        <th>Trip Type</th>
+                                        <th>Bookings</th>
+                                        <th>Base Fare</th>
+                                        <th>Distance Charge</th>
+                                        <th>Platform Fee</th>
+                                        <th>Total Revenue</th>
+                                        <th>Driver Payout</th>
+                                        <th>Admin Commission (<%= commissionPct %>%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% if (!rows || rows.length === 0) { %>
+                                    <tr><td colspan="8" class="center-align" style="color:#999;">No completed bookings in this period yet.</td></tr>
+                                    <% } else { %>
+                                        <% rows.forEach(function(r) { %>
+                                        <tr>
+                                            <td><span class="trip-type-pill pill-<%= (r.tripType || 'unclassified').toLowerCase() %>"><%= r.tripType %></span></td>
+                                            <td><%= r.bookings %></td>
+                                            <td>$<%= r.totalBaseFare.toFixed(2) %></td>
+                                            <td>$<%= r.totalDistanceCharge.toFixed(2) %></td>
+                                            <td>$<%= r.totalPlatformFee.toFixed(2) %></td>
+                                            <td><strong>$<%= r.totalRevenue.toFixed(2) %></strong></td>
+                                            <td>$<%= r.driverPayout.toFixed(2) %></td>
+                                            <td>$<%= r.platformCommission.toFixed(2) %></td>
+                                        </tr>
+                                        <% }) %>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+</body>
+</html>

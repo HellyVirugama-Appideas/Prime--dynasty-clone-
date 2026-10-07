@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+
+<head>
+    <%- include('_layouts/head') %>
+    <title>Incentive Rewards | <%= title %></title>
+
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/extensions/responsive/css/responsive.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/select.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/css/pages/data-tables.css">
+
+    <style>
+        .stat-box { border-radius: 12px; padding: 16px 18px; color: white; box-shadow: 0 4px 14px rgba(0,0,0,0.12); display: block; }
+        .stat-box p { margin: 0; font-size: 0.82rem; opacity: 0.9; }
+        .stat-box h4 { margin: 4px 0 0; font-size: 1.8rem; font-weight: 700; color: white; }
+        .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+        .filter-btn { padding: 8px 18px; border-radius: 25px; border: 2px solid #e0e0e0; font-weight: 600; font-size: 0.85rem;
+            text-decoration: none; color: #555; background: #fff; }
+        .filter-btn.active { background: linear-gradient(135deg, #c62828, #ef5350); color: white; border-color: transparent; }
+        #reward-table td { padding: 12px 10px !important; vertical-align: middle !important; }
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; display: inline-block; }
+        .p-daily { background: #e3f2fd; color: #1565c0; }
+        .p-weekly { background: #f3e5f5; color: #6a1b9a; }
+        .p-bonus { background: #fff8e1; color: #f57f17; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Incentive Rewards Paid</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item"><a href="/admin/incentives">Incentives & Bonus</a></li>
+                                <li class="breadcrumb-item active">Rewards Paid</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="section section-data-tables">
+                        <div class="row">
+                            <div class="col s6 m3" style="margin-bottom:12px;">
+                                <div class="stat-box" style="background:linear-gradient(135deg,#4caf50,#1b5e20);">
+                                    <p>Total paid</p><h4><%= currency %><%= Number(totalPaid).toFixed(2).replace(/\.00$/, '') %></h4>
+                                </div>
+                            </div>
+                            <div class="col s6 m3" style="margin-bottom:12px;">
+                                <div class="stat-box" style="background:linear-gradient(135deg,#c62828,#ef5350);">
+                                    <p>Rewards given</p><h4><%= totalCount %></h4>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="filter-bar">
+                            <span style="font-weight:600;color:#555;">Tab:</span>
+                            <a href="/admin/incentives/rewards?period=all" class="filter-btn <%= period === 'all' ? 'active' : '' %>">All</a>
+                            <a href="/admin/incentives/rewards?period=daily" class="filter-btn <%= period === 'daily' ? 'active' : '' %>">Daily</a>
+                            <a href="/admin/incentives/rewards?period=weekly" class="filter-btn <%= period === 'weekly' ? 'active' : '' %>">Weekly</a>
+                            <a href="/admin/incentives/rewards?period=bonus" class="filter-btn <%= period === 'bonus' ? 'active' : '' %>">Bonus</a>
+                            <a href="/admin/incentives" class="btn waves-effect waves-light grey darken-1" style="margin-left:auto;">
+                                <i class="material-icons left">arrow_back</i> Incentives
+                            </a>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-content">
+                                <%- messages('messages', locals) %>
+                                <p class="grey-text" style="margin-bottom:10px;">Latest 500 rewards (reward milte hi driver ke wallet me credit ho jata hai).</p>
+
+                                <div class="col s12 overflow">
+                                    <table id="reward-table" class="display">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Date</th>
+                                                <th>Driver</th>
+                                                <th>Incentive</th>
+                                                <th>Tab</th>
+                                                <th>Milestone</th>
+                                                <th>Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <% rewards.forEach((r, i) => { %>
+                                            <tr>
+                                                <td><%= i + 1 %></td>
+                                                <td><small><%= new Date(r.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %></small></td>
+                                                <td>
+                                                    <% if (r.driver) { %>
+                                                        <%= r.driver.name %><br><small class="grey-text"><%= r.driver.phone %></small>
+                                                    <% } else { %><span class="grey-text">Deleted driver</span><% } %>
+                                                </td>
+                                                <td><%= r.bonusName || (r.incentive && (r.incentive.title || r.incentive.bonusName)) || '-' %></td>
+                                                <td><span class="badge p-<%= r.period %>"><%= r.period %></span></td>
+                                                <td><%= r.label %></td>
+                                                <td><strong><%= currency %><%= r.reward %></strong></td>
+                                            </tr>
+                                            <% }) %>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+
+    <script src="/app-assets/vendors/data-tables/js/jquery.dataTables.min.js"></script>
+    <script src="/app-assets/js/scripts/data-tables.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            if ($.fn.DataTable.isDataTable('#reward-table')) {
+                $('#reward-table').DataTable().destroy();
+            }
+            $('#reward-table').DataTable({ pageLength: 10, responsive: true, order: [] });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+
+<head>
+    <%- include('_layouts/head') %>
+    <title>Incentives & Bonus | <%= title %></title>
+
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/extensions/responsive/css/responsive.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/select.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/css/pages/data-tables.css">
+
+    <style>
+        .stat-box { border-radius: 12px; padding: 16px 18px; color: white; box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+            cursor: pointer; transition: transform .2s; text-decoration: none; display: block; }
+        .stat-box:hover { transform: translateY(-4px); }
+        .stat-box p { margin: 0; font-size: 0.82rem; opacity: 0.9; }
+        .stat-box h4 { margin: 4px 0 0; font-size: 1.8rem; font-weight: 700; color: white; }
+
+        .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+        .filter-btn { padding: 8px 18px; border-radius: 25px; border: 2px solid #e0e0e0; font-weight: 600; font-size: 0.85rem;
+            cursor: pointer; text-decoration: none; color: #555; background: #fff; transition: all .2s; }
+        .filter-btn.active { background: linear-gradient(135deg, #c62828, #ef5350); color: white; border-color: transparent; }
+        .filter-btn.small { padding: 5px 14px; font-size: 0.78rem; }
+
+        #incentive-table td { padding: 12px 10px !important; vertical-align: middle !important; }
+        #incentive-table th { padding: 14px 10px !important; }
+
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; display: inline-block; }
+        .p-daily { background: #e3f2fd; color: #1565c0; }
+        .p-weekly { background: #f3e5f5; color: #6a1b9a; }
+        .p-bonus { background: #fff8e1; color: #f57f17; }
+        .s-active { background: #e8f5e9; color: #1b5e20; }
+        .s-inactive { background: #ffebee; color: #c62828; }
+        .s-expired { background: #fbe9e7; color: #bf360c; }
+        .s-upcoming { background: #fff8e1; color: #f57f17; }
+
+        .tier-chip { display: inline-block; background: #f5f5f5; border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; font-size: 0.76rem; color: #444; }
+        .action-btn { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;
+            margin-right: 4px; text-decoration: none; border: none; cursor: pointer; }
+        .btn-edit { background: #e3f2fd; color: #1565c0; }
+        .btn-toggle { background: #fff3e0; color: #e65100; }
+        .btn-del { background: #ffebee; color: #c62828; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Incentives & Bonus</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item active">Incentives & Bonus</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="section section-data-tables">
+                        <div class="row">
+
+                            <!-- Stats -->
+                            <div class="row">
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/incentives?period=<%= period %>&status=all" class="stat-box" style="background:linear-gradient(135deg,#c62828,#ef5350);">
+                                        <p>Total</p><h4><%= counts.total %></h4>
+                                    </a>
+                                </div>
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/incentives?period=<%= period %>&status=active" class="stat-box" style="background:linear-gradient(135deg,#4caf50,#1b5e20);">
+                                        <p>Active</p><h4><%= counts.active %></h4>
+                                    </a>
+                                </div>
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/incentives?period=<%= period %>&status=inactive" class="stat-box" style="background:linear-gradient(135deg,#ff9800,#e65100);">
+                                        <p>Inactive</p><h4><%= counts.inactive %></h4>
+                                    </a>
+                                </div>
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/incentives?period=<%= period %>&status=expired" class="stat-box" style="background:linear-gradient(135deg,#78909c,#37474f);">
+                                        <p>Expired</p><h4><%= counts.expired %></h4>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Period tabs (driver app ke Daily / Weekly / Bonus tabs) -->
+                            <div class="filter-bar">
+                                <span style="font-weight:600;color:#555;">Tab:</span>
+                                <a href="/admin/incentives?period=all&status=<%= status %>" class="filter-btn <%= period === 'all' ? 'active' : '' %>">All</a>
+                                <a href="/admin/incentives?period=daily&status=<%= status %>" class="filter-btn <%= period === 'daily' ? 'active' : '' %>">Daily</a>
+                                <a href="/admin/incentives?period=weekly&status=<%= status %>" class="filter-btn <%= period === 'weekly' ? 'active' : '' %>">Weekly</a>
+                                <a href="/admin/incentives?period=bonus&status=<%= status %>" class="filter-btn <%= period === 'bonus' ? 'active' : '' %>">Bonus</a>
+
+                                <a href="/admin/incentives/rewards" class="btn waves-effect waves-light grey darken-1" style="margin-left:auto;">
+                                    <i class="material-icons left">history</i> Rewards Paid
+                                </a>
+                                <a href="/admin/incentives/add<%= period !== 'all' ? '?period=' + period : '' %>" class="btn waves-effect waves-light" style="background:#c62828;">
+                                    <i class="material-icons left">add</i> Add Incentive
+                                </a>
+                            </div>
+
+                            <div class="filter-bar">
+                                <span style="font-weight:600;color:#555;">Status:</span>
+                                <% ['all','active','inactive','expired'].forEach(s => { %>
+                                    <a href="/admin/incentives?period=<%= period %>&status=<%= s %>" class="filter-btn small <%= status === s ? 'active' : '' %>"><%= s.charAt(0).toUpperCase() + s.slice(1) %></a>
+                                <% }) %>
+                            </div>
+
+                            <div class="col s12">
+                                <div class="card">
+                                    <div class="card-content">
+                                        <%- messages('messages', locals) %>
+
+                                        <div class="row">
+                                            <div class="col s12 overflow">
+                                                <table id="incentive-table" class="display">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>#</th>
+                                                            <th>Incentive</th>
+                                                            <th>Tab</th>
+                                                            <th>Counts</th>
+                                                            <th>Time Window</th>
+                                                            <th>Milestones (target → reward)</th>
+                                                            <th>Valid</th>
+                                                            <th>Status</th>
+                                                            <th>Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <% incentives.forEach((inc, i) => { %>
+                                                        <tr>
+                                                            <td><%= i + 1 %></td>
+                                                            <td>
+                                                                <strong><%= inc.displayTitle %></strong><br>
+                                                                <small class="grey-text"><%= inc.displaySubtitle %></small>
+                                                                <% if (inc.bonusName) { %><br><small>Name: <%= inc.bonusName %></small><% } %>
+                                                            </td>
+                                                            <td><span class="badge p-<%= inc.period %>"><%= inc.period %></span></td>
+                                                            <td>
+                                                                <%= inc.metric === 'distance' ? 'Distance (' + inc.distanceUnit + ')' : (inc.metric === 'days' ? 'Days (' + inc.minRidesPerDay + ' ride/day)' : 'Rides') %>
+                                                            </td>
+                                                            <td>
+                                                                <%= inc.windowText || '—' %>
+                                                                <% if (inc.period === 'daily' && inc.daysOfWeek && inc.daysOfWeek.length) { %>
+                                                                    <br><small class="grey-text"><%= inc.daysOfWeek.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') %></small>
+                                                                <% } %>
+                                                            </td>
+                                                            <td>
+                                                                <% inc.tiers.forEach(t => { %>
+                                                                    <span class="tier-chip"><%= t.target %> → <%= currency %><%= t.reward %></span>
+                                                                <% }) %>
+                                                            </td>
+                                                            <td><small><%= inc.fromText %><br>to <%= inc.toText %></small></td>
+                                                            <td><span class="badge s-<%= inc.state %>"><%= inc.state %></span></td>
+                                                            <td>
+                                                                <a href="/admin/incentives/edit/<%= inc._id %>" class="action-btn btn-edit">Edit</a>
+
+                                                                <form action="/admin/incentives/toggle/<%= inc._id %>" method="POST" style="display:inline;">
+                                                                    <button type="submit" class="action-btn btn-toggle"><%= inc.isActive ? 'Deactivate' : 'Activate' %></button>
+                                                                </form>
+
+                                                                <form action="/admin/incentives/delete/<%= inc._id %>" method="POST" style="display:inline;"
+                                                                    onsubmit="return confirm('Delete this incentive? Rewards already paid stay in history.');">
+                                                                    <button type="submit" class="action-btn btn-del">Delete</button>
+                                                                </form>
+                                                            </td>
+                                                        </tr>
+                                                        <% }) %>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+
+    <script src="/app-assets/vendors/data-tables/js/jquery.dataTables.min.js"></script>
+    <script src="/app-assets/js/scripts/data-tables.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            if ($.fn.DataTable.isDataTable('#incentive-table')) {
+                $('#incentive-table').DataTable().destroy();
+            }
+            $('#incentive-table').DataTable({
+                pageLength: 10,
+                responsive: true,
+                columnDefs: [{ orderable: false, targets: [5, 8] }]
+            });
+        });
+    </script>
+</body>
+
+</html>

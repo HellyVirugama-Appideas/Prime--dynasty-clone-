@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+
+<head>
+    <%- include('_layouts/head') %>
+    <title>Offers | <%= title %></title>
+
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/extensions/responsive/css/responsive.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/select.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="/app-assets/css/pages/data-tables.css">
+
+    <style>
+        .stat-box {
+            border-radius: 12px; padding: 16px 18px; color: white;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.12); cursor: pointer;
+            transition: transform .2s; text-decoration: none; display: block;
+        }
+        .stat-box:hover { transform: translateY(-4px); }
+        .stat-box p { margin:0; font-size:0.82rem; opacity:0.9; }
+        .stat-box h4 { margin:4px 0 0; font-size:1.8rem; font-weight:700; color:white; }
+
+        .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; align-items:center; }
+        .filter-btn {
+            padding:8px 18px; border-radius:25px; border:2px solid #e0e0e0;
+            font-weight:600; font-size:0.85rem; cursor:pointer; text-decoration:none;
+            color:#555; background:#fff; transition:all .2s;
+        }
+        .filter-btn.active {
+            background:linear-gradient(135deg,#11998e,#38ef7d);
+            color:white; border-color:transparent;
+        }
+
+        #page-length-option tbody tr { height: 58px !important; }
+        #page-length-option td { padding: 14px 10px !important; vertical-align: middle !important; }
+        #page-length-option th { padding: 14px 10px !important; }
+
+        .status-badge {
+            padding: 5px 14px; border-radius: 20px;
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+        }
+        .s-active   { background:#e8f5e9; color:#1b5e20; }
+        .s-inactive { background:#ffebee; color:#c62828; }
+        .s-expired  { background:#fbe9e7; color:#bf360c; }
+        .s-upcoming { background:#fff8e1; color:#f57f17; }
+
+        .offer-img { width:44px; height:44px; border-radius:8px; object-fit:cover; }
+        .code-badge {
+            background:#eceff1; color:#37474f; padding:4px 10px;
+            border-radius:6px; font-weight:700; font-size:0.8rem;
+        }
+        .action-btn {
+            display:inline-block; padding:4px 10px; border-radius:6px;
+            font-size:0.75rem; font-weight:600; margin-right:4px; text-decoration:none;
+            border:none; cursor:pointer;
+        }
+        .btn-edit { background:#e3f2fd; color:#1565c0; }
+        .btn-toggle { background:#fff3e0; color:#e65100; }
+        .btn-del { background:#ffebee; color:#c62828; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Offers</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item active">Offers</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="section section-data-tables">
+                        <div class="row">
+
+                            <!-- Stats Row -->
+                            <div class="row">
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/offers?status=all" class="stat-box" style="background:linear-gradient(135deg,#11998e,#38ef7d);">
+                                        <p>Total</p>
+                                        <h4><%= totalCount %></h4>
+                                    </a>
+                                </div>
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/offers?status=active" class="stat-box" style="background:linear-gradient(135deg,#4caf50,#1b5e20);">
+                                        <p>Active</p>
+                                        <h4><%= activeCount %></h4>
+                                    </a>
+                                </div>
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/offers?status=inactive" class="stat-box" style="background:linear-gradient(135deg,#ff9800,#e65100);">
+                                        <p>Inactive</p>
+                                        <h4><%= inactiveCount %></h4>
+                                    </a>
+                                </div>
+                                <div class="col s6 m3" style="margin-bottom:12px;">
+                                    <a href="/admin/offers?status=expired" class="stat-box" style="background:linear-gradient(135deg,#f44336,#b71c1c);">
+                                        <p>Expired</p>
+                                        <h4><%= expiredCount %></h4>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Filter Bar -->
+                            <div class="filter-bar">
+                                <span style="font-weight:600;color:#555;">Filter:</span>
+                                <a href="/admin/offers?status=all" class="filter-btn <%= statusFilter === 'all' ? 'active' : '' %>">All</a>
+                                <a href="/admin/offers?status=active" class="filter-btn <%= statusFilter === 'active' ? 'active' : '' %>">Active</a>
+                                <a href="/admin/offers?status=inactive" class="filter-btn <%= statusFilter === 'inactive' ? 'active' : '' %>">Inactive</a>
+                                <a href="/admin/offers?status=expired" class="filter-btn <%= statusFilter === 'expired' ? 'active' : '' %>">Expired</a>
+
+                                <a href="/admin/offers/add" class="btn waves-effect waves-light" style="margin-left:auto;background:#11998e;">
+                                    <i class="material-icons left">add</i> Add Offer
+                                </a>
+                            </div>
+
+                            <div class="col s12">
+                                <div class="card">
+                                    <div class="card-content">
+                                        <%- messages('messages', locals) %>
+
+                                        <div class="row">
+                                            <div class="col s12 overflow">
+                                                <table id="page-length-option" class="display">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>#</th>
+                                                            <th>Image</th>
+                                                            <th>Title</th>
+                                                            <th>Code</th>
+                                                            <th>Discount</th>
+                                                            <th>Applicable</th>
+                                                            <th>Valid From</th>
+                                                            <th>Valid To</th>
+                                                            <th>Used</th>
+                                                            <th>Status</th>
+                                                            <th>Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <% offers.forEach((offer, i) => { %>
+                                                        <% 
+                                                            const now = new Date();
+                                                            let statusClass = 's-active', statusText = 'Active';
+                                                            if (!offer.isActive) { statusClass = 's-inactive'; statusText = 'Inactive'; }
+                                                            else if (now < new Date(offer.validFrom)) { statusClass = 's-upcoming'; statusText = 'Upcoming'; }
+                                                            else if (now > new Date(offer.validTo)) { statusClass = 's-expired'; statusText = 'Expired'; }
+                                                        %>
+                                                        <tr>
+                                                            <td><%= i + 1 %></td>
+                                                            <td>
+                                                                <% if (offer.image) { %>
+                                                                    <img src="<%= offer.image %>" class="offer-img">
+                                                                <% } else { %>
+                                                                    <span class="grey-text">-</span>
+                                                                <% } %>
+                                                            </td>
+                                                            <td><strong><%= offer.title %></strong></td>
+                                                            <td><span class="code-badge"><%= offer.code %></span></td>
+                                                            <td>
+                                                                <% if (offer.offerType === 'progress') { %>
+                                                                    <small><b>Target: <%= offer.targetCount %></b><br>Reward: ₹<%= offer.rewardValue %></small>
+                                                                <% } else { %>
+                                                                    <%= offer.discountType === 'flat' ? '₹' + offer.discountValue : offer.discountValue + '%' %>
+                                                                <% } %>
+                                                            </td>
+                                                            <td><small style="text-transform:capitalize;"><%= offer.applicableOn %></small></td>
+                                                            <td><small><%= new Date(offer.validFrom).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) %></small></td>
+                                                            <td><small><%= new Date(offer.validTo).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) %></small></td>
+                                                            <td>
+                                                                <small><%= offer.totalUsedCount %><%= offer.totalUsageLimit ? '/' + offer.totalUsageLimit : '' %></small>
+                                                            </td>
+                                                            <td>
+                                                                <span class="status-badge <%= statusClass %>"><%= statusText %></span>
+                                                            </td>
+                                                            <td>
+                                                                <a href="/admin/offers/edit/<%= offer._id %>" class="action-btn btn-edit">Edit</a>
+
+                                                                <form action="/admin/offers/toggle/<%= offer._id %>" method="POST" style="display:inline;">
+                                                                    <button type="submit" class="action-btn btn-toggle">
+                                                                        <%= offer.isActive ? 'Deactivate' : 'Activate' %>
+                                                                    </button>
+                                                                </form>
+
+                                                                <form action="/admin/offers/delete/<%= offer._id %>" method="POST" style="display:inline;"
+                                                                      onsubmit="return confirm('Delete this offer?');">
+                                                                    <button type="submit" class="action-btn btn-del">Delete</button>
+                                                                </form>
+                                                            </td>
+                                                        </tr>
+                                                        <% }) %>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+
+    <script src="/app-assets/vendors/data-tables/js/jquery.dataTables.min.js"></script>
+    <script src="/app-assets/js/scripts/data-tables.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            if ($.fn.DataTable.isDataTable('#page-length-option')) {
+                $('#page-length-option').DataTable().destroy();
+            }
+
+            $('#page-length-option').DataTable({
+                "pageLength": 10,
+                "responsive": true,
+                "columnDefs": [
+                    { "orderable": false, "targets": [1, 10] }
+                ]
+            });
+        });
+    </script>
+</body>
+</html>

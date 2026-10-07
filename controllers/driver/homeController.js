@@ -1,0 +1,109 @@
+const createError = require('http-errors');
+const formatTimestamp = require('../../utils/formatTimestamp');
+
+const Driver = require('../../models/driverModel');
+const Notification = require('../../models/notificationModel');
+
+exports.getStatus = (req, res, next) => {
+    try {
+        const status = req.driver.status;
+        res.json({ code: '1', message: req.t('success'), status });
+    } catch (error) {
+        next(error);
+    }
+};`\=6`
+
+exports.setStatus = async (req, res, next) => {
+    try {
+        const status = req.body.status;
+        if (status !== 'online' && status !== 'offline')
+            return next(createError.BadRequest('Invalid status.'));
+
+        const driver = await Driver.findByIdAndUpdate(
+            req.driver.id,
+            { status },
+            { new: true, runValidators: true }
+        );
+
+        res.json({
+            code: '1',
+            message: req.t('success'),
+            status: driver.status,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.setLocation = async (req, res, next) => {
+    try {
+        const { latitude, longitude } = req.body;
+        if (!latitude || !longitude)
+            return next(createError.BadRequest('Invalid latitude longitude.'));
+
+        await Driver.findByIdAndUpdate(
+            req.driver.id,
+            { location: { type: 'Point', coordinates: [longitude, latitude] } },
+            { new: true }
+        );
+
+        res.json({ code: '1', message: req.t('success') });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// exports.getNotifications = async (req, res, next) => {
+//     try {
+//         const notifications = await Notification.find({
+//             driver: req.driver.id,
+//         })
+//             .select('-__v -driver')
+//             .sort('-_id')
+//             .populate('car', 'pics')
+//             .lean();
+
+//         // Format timestamps
+//         notifications.forEach(notification => {
+//             notification.image = notification.car?.pics[0];
+//             notification.car = undefined;
+
+//             notification.createdAt = formatTimestamp(
+//                 notification.updatedAt,
+//                 req
+//             );
+//         });
+
+//         res.json({ code: '1', message: req.t('success'), notifications });
+//     } catch (error) {
+//         next(error);
+//     }
+// };
+
+
+exports.getNotifications = async (req, res, next) => {
+    try {
+        console.log('=== Driver getNotifications ===');
+        console.log('Driver ID:', req.driver.id);
+
+        const notifications = await Notification.find({
+            driver: req.driver.id,
+        })
+            .select('-__v -driver')
+            .sort('-_id')
+            .populate('car', 'pics')
+            .lean();
+
+        console.log('Notifications found:', notifications.length);
+
+        notifications.forEach(notification => {
+            notification.image = notification.car?.pics[0];
+            notification.car = undefined;
+            notification.createdAt = formatTimestamp(notification.updatedAt, req);
+        });
+
+        res.json({ code: '1', message: req.t('success'), notifications });
+    } catch (error) {
+        next(error);
+    }
+};

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+
+<head>
+    <%- include('_layouts/head') %>
+    <title>Add Offer | <%= title %></title>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Add Offer</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item"><a href="/admin/offers">Offers</a></li>
+                                <li class="breadcrumb-item active">Add</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12">
+                            <div class="card">
+                                <div class="card-content">
+                                    <%- messages('messages', locals) %>
+
+                                    <form action="/admin/offers/add" method="POST" enctype="multipart/form-data">
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <input id="title" type="text" name="title" value="<%= formData.title || '' %>" required>
+                                                <label for="title" class="active">Title *</label>
+                                            </div>
+                                            <div class="input-field col s12 m6">
+                                                <input id="code" type="text" name="code" class="text-uppercase" value="<%= formData.code || '' %>" required>
+                                                <label for="code" class="active">Coupon Code *</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <select id="offerType" name="offerType">
+                                                    <option value="coupon" <%= (formData.offerType || 'coupon') === 'coupon' ? 'selected' : '' %>>Coupon (discount code)</option>
+                                                    <option value="progress" <%= formData.offerType === 'progress' ? 'selected' : '' %>>Progress Reward (e.g. complete 20 rides)</option>
+                                                </select>
+                                                <label>Offer Type *</label>
+                                            </div>
+                                        </div>
+
+                                        <!-- ========== PROGRESS REWARD FIELDS (sirf offerType = progress par dikhte hain) ========== -->
+                                        <div id="progressFields" style="display:none;">
+                                            <div class="row">
+                                                <div class="input-field col s12 m6">
+                                                    <select id="progressType" name="progressType">
+                                                        <option value="rides_in_period" <%= (formData.progressType || 'rides_in_period') === 'rides_in_period' ? 'selected' : '' %>>Rides in a week / month</option>
+                                                        <option value="consecutive_days" <%= formData.progressType === 'consecutive_days' ? 'selected' : '' %>>Ride on consecutive days</option>
+                                                        <option value="rides_in_time_window" <%= formData.progressType === 'rides_in_time_window' ? 'selected' : '' %>>Rides in a time window</option>
+                                                    </select>
+                                                    <label>Progress Type *</label>
+                                                </div>
+                                                <div class="input-field col s12 m6" id="periodWrap">
+                                                    <select id="periodType" name="periodType">
+                                                        <option value="month" <%= (formData.periodType || 'month') === 'month' ? 'selected' : '' %>>Month</option>
+                                                        <option value="week" <%= formData.periodType === 'week' ? 'selected' : '' %>>Week</option>
+                                                    </select>
+                                                    <label>Period *</label>
+                                                </div>
+                                            </div>
+
+                                            <div class="row">
+                                                <div class="input-field col s12 m6">
+                                                    <input id="targetCount" type="number" min="1" step="1" name="targetCount" value="<%= formData.targetCount || '' %>">
+                                                    <label for="targetCount" class="active">Target Value * (e.g. 20 rides / 7 days)</label>
+                                                </div>
+                                                <div class="input-field col s12 m6">
+                                                    <input id="rewardValue" type="number" min="0" step="0.01" name="rewardValue" value="<%= formData.rewardValue || '' %>">
+                                                    <label for="rewardValue" class="active">Reward Amount * ($ wallet credit)</label>
+                                                </div>
+                                            </div>
+
+                                            <div class="row" id="timeWrap">
+                                                <div class="input-field col s12 m6">
+                                                    <input id="timeWindowStart" type="time" name="timeWindowStart" value="<%= formData.timeWindowStart || '' %>">
+                                                    <label for="timeWindowStart" class="active">Time Window Start</label>
+                                                </div>
+                                                <div class="input-field col s12 m6">
+                                                    <input id="timeWindowEnd" type="time" name="timeWindowEnd" value="<%= formData.timeWindowEnd || '' %>">
+                                                    <label for="timeWindowEnd" class="active">Time Window End</label>
+                                                </div>
+                                            </div>
+
+                                            <input type="hidden" name="rewardType" value="wallet_credit">
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="input-field col s12">
+                                                <textarea id="description" name="description" class="materialize-textarea"><%= formData.description || '' %></textarea>
+                                                <label for="description" class="active">Description</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="file-field input-field col s12 m6">
+                                                <div class="btn" style="background:#11998e;">
+                                                    <span>Offer Image</span>
+                                                    <input type="file" name="image" accept="image/*">
+                                                </div>
+                                                <div class="file-path-wrapper">
+                                                    <input class="file-path validate" type="text" placeholder="Upload offer banner">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div id="couponFields">
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <select id="discountType" name="discountType" required>
+                                                    <option value="flat">Flat Amount</option>
+                                                    <option value="percentage">Percentage</option>
+                                                </select>
+                                                <label>Discount Type *</label>
+                                            </div>
+                                            <div class="input-field col s12 m6">
+                                                <input id="discountValue" type="number" step="0.01" name="discountValue" value="<%= formData.discountValue || '' %>" required>
+                                                <label for="discountValue" class="active">Discount Value *</label>
+                                            </div>
+                                        </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <input id="maxDiscount" type="number" step="0.01" name="maxDiscount" value="<%= formData.maxDiscount || 0 %>">
+                                                <label for="maxDiscount" class="active">Max Discount (for %, 0 = no cap)</label>
+                                            </div>
+                                            <div class="input-field col s12 m6">
+                                                <input id="minOrderAmount" type="number" step="0.01" name="minOrderAmount" value="<%= formData.minOrderAmount || 0 %>">
+                                                <label for="minOrderAmount" class="active">Minimum Order Amount</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <select id="applicableOn" name="applicableOn" required>
+                                                    <option value="all">All (Ride + Rent)</option>
+                                                    <option value="ride">Ride Only</option>
+                                                    <option value="rent">Rent Only</option>
+                                                </select>
+                                                <label>Applicable On *</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <input id="validFrom" type="date" name="validFrom" required>
+                                                <label for="validFrom" class="active">Valid From *</label>
+                                            </div>
+                                            <div class="input-field col s12 m6">
+                                                <input id="validTo" type="date" name="validTo" required>
+                                                <label for="validTo" class="active">Valid To *</label>
+                                            </div>
+                                        </div>
+
+                                        <div class="row">
+                                            <div class="input-field col s12 m6">
+                                                <input id="usageLimitPerUser" type="number" name="usageLimitPerUser" value="1">
+                                                <label for="usageLimitPerUser" class="active">Usage Limit Per User (0 = unlimited)</label>
+                                            </div>
+                                            <div class="input-field col s12 m6">
+                                                <input id="totalUsageLimit" type="number" name="totalUsageLimit" value="0">
+                                                <label for="totalUsageLimit" class="active">Total Usage Limit (0 = unlimited)</label>
+                                            </div>
+                                        </div>
+
+                                        <button type="submit" class="btn waves-effect waves-light" style="background:#11998e;">
+                                            Create Offer
+                                        </button>
+                                        <a href="/admin/offers" class="btn-flat waves-effect">Cancel</a>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+
+    <script>
+        $(document).ready(function () {
+            $('select').formSelect();
+        });
+    
+        function toggleOfferType() {
+            var isProgress = $('#offerType').val() === 'progress';
+            var pt = $('#progressType').val();
+            $('#progressFields').toggle(isProgress);
+            $('#couponFields').toggle(!isProgress);
+            $('#discountValue').prop('required', !isProgress);
+            $('#discountType').prop('required', !isProgress);
+            $('#targetCount, #rewardValue').prop('required', isProgress);
+            $('#periodWrap').toggle(isProgress && pt === 'rides_in_period');
+            $('#timeWrap').toggle(isProgress && pt === 'rides_in_time_window');
+        }
+        $(document).ready(function () {
+            $('#offerType, #progressType').on('change', toggleOfferType);
+            toggleOfferType();
+        });
+    </script>
+</body>
+</html>

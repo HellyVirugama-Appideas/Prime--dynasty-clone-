@@ -1,0 +1,7 @@
+.env
+node_modules
+TXT
+temp-fix.js
+public/uploads/
+utils/primeride-df400-firebase-adminsdk-fbsvc-483e5c7f80.json
+

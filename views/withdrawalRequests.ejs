@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<head>
+    <%- include('_layouts/head') %>
+    <title>Withdrawal Requests | <%= title %></title>
+    <style>
+        .tab-btn {
+            padding: 8px 20px; border-radius: 30px; border: 2px solid #e0e0e0;
+            font-weight: 600; font-size: 0.85rem; cursor: pointer;
+            text-decoration: none; color: #555; background: #fff; transition: all .2s;
+            display: inline-block;
+        }
+        .tab-btn.active, .tab-btn:hover {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white; border-color: transparent;
+        }
+        .summary-cards { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+        .summary-card {
+            flex: 1; min-width: 140px; border-radius: 12px; padding: 16px 18px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+        }
+        .summary-card p { margin: 0; font-size: 0.8rem; }
+        .summary-card h5 { margin: 6px 0 0; font-size: 1.35rem; font-weight: 700; }
+
+        .badge-pill {
+            display: inline-block; padding: 3px 12px; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 700; text-transform: capitalize;
+        }
+        .badge-pending    { background: #fff8e1; color: #f57f17; }
+        .badge-processing { background: #e3f2fd; color: #1565c0; }
+        .badge-completed  { background: #e8f5e9; color: #2e7d32; }
+        .badge-failed     { background: #ffebee; color: #c62828; }
+        .badge-cancelled  { background: #f5f5f5; color: #616161; }
+
+        .action-btn {
+            display: inline-block; padding: 5px 14px; border-radius: 20px;
+            font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            border: none; transition: all .15s; text-decoration: none;
+        }
+        .btn-approve { background: #e8f5e9; color: #2e7d32; }
+        .btn-approve:hover { background: #2e7d32; color: white; }
+        .btn-reject  { background: #ffebee; color: #c62828; }
+        .btn-reject:hover  { background: #c62828; color: white; }
+        .btn-detail  { background: #f3e5f5; color: #6a1b9a; }
+        .btn-detail:hover  { background: #6a1b9a; color: white; }
+
+        .no-data { text-align: center; padding: 48px; color: #aaa; }
+        .no-data i { font-size: 3rem; display: block; margin-bottom: 10px; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: white; border-radius: 16px; padding: 28px 32px;
+            width: 100%; max-width: 480px; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+        }
+        .modal-box h5 { margin: 0 0 18px; font-size: 1.1rem; font-weight: 700; }
+        .modal-box .field { margin-bottom: 12px; }
+        .modal-box label { font-size: 0.8rem; color: #777; display: block; margin-bottom: 4px; }
+        .modal-box input, .modal-box textarea {
+            width: 100%; padding: 8px 12px; border: 1.5px solid #e0e0e0;
+            border-radius: 8px; font-size: 0.9rem; font-family: inherit;
+            box-sizing: border-box;
+        }
+        .modal-box textarea { resize: vertical; min-height: 80px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .modal-actions .btn { border-radius: 20px; font-weight: 600; font-size: 0.88rem; }
+        .driver-meta { font-size: 0.8rem; color: #777; }
+
+        /* Detail modal */
+        .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { color: #777; }
+        .detail-value { font-weight: 600; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Withdrawal Requests</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item active">Withdrawal Requests</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="container" style="margin-top: 26px;">
+                <div class="row"><div class="col s12"><%- messages('messages', locals) %></div></div>
+
+                <!-- Summary Cards -->
+                <div class="summary-cards">
+                    <div class="summary-card" style="background: linear-gradient(135deg,#fff8e1,#ffe082); color: #5d4037;">
+                        <p style="color:#795548;">Pending</p>
+                        <h5><%= summary.pending %> <small style="font-size:0.75rem;font-weight:400;">requests</small></h5>
+                        <p style="margin-top:4px; font-size:0.78rem; color:#795548;">₹<%= pendingAmount %> awaiting</p>
+                    </div>
+                    <div class="summary-card" style="background: linear-gradient(135deg,#e3f2fd,#90caf9); color:#0d3c61;">
+                        <p style="color:#1565c0;">Processing</p>
+                        <h5><%= summary.processing %></h5>
+                    </div>
+                    <div class="summary-card" style="background: linear-gradient(135deg,#e8f5e9,#a5d6a7); color:#1b5e20;">
+                        <p style="color:#2e7d32;">Completed</p>
+                        <h5><%= summary.completed %> <small style="font-size:0.75rem;font-weight:400;">paid out</small></h5>
+                        <p style="margin-top:4px; font-size:0.78rem; color:#388e3c;">₹<%= completedAmount %> total</p>
+                    </div>
+                    <div class="summary-card" style="background: linear-gradient(135deg,#ffebee,#ef9a9a); color:#7f0000;">
+                        <p style="color:#c62828;">Failed</p>
+                        <h5><%= summary.failed %></h5>
+                    </div>
+                    <div class="summary-card" style="background: linear-gradient(135deg,#f5f5f5,#e0e0e0); color:#333;">
+                        <p style="color:#616161;">Cancelled</p>
+                        <h5><%= summary.cancelled %></h5>
+                    </div>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+                    <% ['all','pending','processing','completed','failed','cancelled'].forEach(s => { %>
+                    <a href="/admin/withdrawals?status=<%= s %>"
+                       class="tab-btn <%= filterStatus === s ? 'active' : '' %>">
+                        <%= s.charAt(0).toUpperCase() + s.slice(1) %>
+                        <% if (s === 'pending' && summary.pending > 0) { %>
+                            <span style="background:white;color:#f57f17;border-radius:10px;padding:0 6px;font-size:0.72rem;margin-left:4px;"><%= summary.pending %></span>
+                        <% } %>
+                    </a>
+                    <% }) %>
+                </div>
+
+                <!-- Table -->
+                <div class="card" style="border-radius:14px; box-shadow:0 4px 18px rgba(0,0,0,0.09);">
+                    <div class="card-content">
+                        <% if (withdrawals.length === 0) { %>
+                        <div class="no-data">
+                            <i class="material-icons grey-text">account_balance_wallet</i>
+                            No withdrawal requests found for this filter.
+                        </div>
+                        <% } else { %>
+                        <div style="overflow-x:auto;">
+                            <table class="striped responsive-table">
+                                <thead>
+                                    <tr style="background:#f5f0ff;">
+                                        <th>#</th>
+                                        <th>Driver</th>
+                                        <th>Requested</th>
+                                        <th>Fee</th>
+                                        <th>Driver Gets</th>
+                                        <th>Status</th>
+                                        <th>Stripe</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% withdrawals.forEach((w, i) => { %>
+                                    <tr>
+                                        <td><%= i + 1 %></td>
+                                        <td>
+                                            <% if (w.driverId) { %>
+                                                <strong><%= w.driverId.name || 'N/A' %></strong>
+                                                <br>
+                                                <small class="grey-text"><%= w.driverId.email || w.driverId.phone || '' %></small>
+                                            <% } else { %>
+                                                <span class="grey-text">Deleted Driver</span>
+                                            <% } %>
+                                        </td>
+                                        <td><strong>₹<%= w.formattedAmount %></strong></td>
+                                        <td><small class="grey-text">₹<%= w.formattedFee %></small></td>
+                                        <td class="green-text"><strong>₹<%= w.formattedNet %></strong></td>
+                                        <td>
+                                            <span class="badge-pill badge-<%= w.status %>">
+                                                <%= w.status %>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <% if (w.stripeTransferId) { %>
+                                                <small class="green-text"><i class="material-icons tiny">check_circle</i> <%= w.stripeTransferId.slice(0,12) %>…</small>
+                                            <% } else if (w.driverId && w.driverId.stripePayoutsEnabled) { %>
+                                                <small class="grey-text"><i class="material-icons tiny">verified_user</i> Ready</small>
+                                            <% } else { %>
+                                                <small class="red-text"><i class="material-icons tiny">warning</i> Not set up</small>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <small><%= w.createdAt ? new Date(w.createdAt).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) : '-' %></small>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                                <!-- Detail button (always shown) -->
+                                                <button class="action-btn btn-detail"
+                                                    onclick="showDetail('<%= w._id %>')">
+                                                    Detail
+                                                </button>
+
+                                                <% if (w.status === 'pending') { %>
+                                                    <!-- Approve -->
+                                                    <button class="action-btn btn-approve"
+                                                        onclick="openApprove('<%= w._id %>', '<%= (w.driverId && w.driverId.name) || 'Driver' %>', '<%= w.formattedAmount %>', '<%= w.formattedNet %>')">
+                                                        Approve
+                                                    </button>
+                                                    <!-- Reject -->
+                                                    <button class="action-btn btn-reject"
+                                                        onclick="openReject('<%= w._id %>', '<%= (w.driverId && w.driverId.name) || 'Driver' %>')">
+                                                        Reject
+                                                    </button>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <% }) %>
+                                </tbody>
+                            </table>
+                        </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <% if (totalPages > 1) { %>
+                <div style="text-align:center; margin:20px 0;">
+                    <% for(let p = 1; p <= totalPages; p++) { %>
+                        <a href="/admin/withdrawals?status=<%= filterStatus %>&page=<%= p %>"
+                           class="btn btn-small <%= p === currentPage ? 'purple' : 'grey lighten-3 black-text' %>"
+                           style="margin:2px; border-radius:20px;">
+                            <%= p %>
+                        </a>
+                    <% } %>
+                </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- APPROVE MODAL -->
+    <div class="modal-overlay" id="approveModal">
+        <div class="modal-box">
+            <h5>✅ Approve Withdrawal</h5>
+            <p id="approveInfo" style="font-size:0.9rem; margin-bottom:16px; color:#555;"></p>
+            <div style="background:#e8f5e9; border-radius:10px; padding:12px 16px; margin-bottom:16px;">
+                <div class="detail-row">
+                    <span class="detail-label">Requested amount</span>
+                    <span class="detail-value" id="approveAmount">-</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Driver receives</span>
+                    <span class="detail-value green-text" id="approveNet">-</span>
+                </div>
+            </div>
+            <p style="font-size:0.82rem; color:#888;">This will immediately initiate a Stripe transfer to the driver's connected account. This action cannot be undone.</p>
+            <form id="approveForm" method="POST">
+                <input type="hidden" name="_method" value="POST">
+                <div class="modal-actions">
+                    <button type="button" class="btn grey lighten-2 black-text" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="btn green">Confirm & Transfer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- REJECT MODAL -->
+    <div class="modal-overlay" id="rejectModal">
+        <div class="modal-box">
+            <h5>❌ Reject Withdrawal</h5>
+            <p id="rejectInfo" style="font-size:0.9rem; margin-bottom:16px; color:#555;"></p>
+            <form id="rejectForm" method="POST">
+                <input type="hidden" name="_method" value="POST">
+                <div class="field">
+                    <label>Rejection reason (shown to driver)</label>
+                    <textarea name="reason" placeholder="e.g. Unverified bank account, suspicious activity…"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn grey lighten-2 black-text" onclick="closeModals()">Cancel</button>
+                    <button type="submit" class="btn red">Reject Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- DETAIL MODAL -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal-box" style="max-width:520px;">
+            <h5>Withdrawal Detail</h5>
+            <div id="detailContent">
+                <p style="text-align:center; color:#aaa;">Loading…</p>
+            </div>
+            <div style="text-align:right; margin-top:16px;">
+                <button class="btn grey lighten-2 black-text" onclick="closeModals()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+    <script>
+        function openApprove(id, name, amount, net) {
+            document.getElementById('approveInfo').textContent = `Driver: ${name}`;
+            document.getElementById('approveAmount').textContent = `₹${amount}`;
+            document.getElementById('approveNet').textContent = `₹${net}`;
+            document.getElementById('approveForm').action = `/admin/withdrawals/${id}/approve`;
+            document.getElementById('approveModal').classList.add('open');
+        }
+
+        function openReject(id, name) {
+            document.getElementById('rejectInfo').textContent = `Driver: ${name}`;
+            document.getElementById('rejectForm').action = `/admin/withdrawals/${id}/reject`;
+            document.getElementById('rejectModal').classList.add('open');
+        }
+
+        async function showDetail(id) {
+            document.getElementById('detailModal').classList.add('open');
+            document.getElementById('detailContent').innerHTML = '<p style="text-align:center;color:#aaa;">Loading…</p>';
+
+            try {
+                const res = await fetch(`/admin/withdrawals/${id}/detail`);
+                const w = await res.json();
+
+                if (w.error) throw new Error(w.error);
+
+                const rows = [
+                    ['Withdrawal ID', w._id],
+                    ['Driver', w.driverId ? `${w.driverId.name} (${w.driverId.email || w.driverId.phone || ''})` : 'N/A'],
+                    ['Requested', `₹${w.formattedAmount}`],
+                    ['Processing Fee', `₹${w.formattedFee}`],
+                    ['Net Payout', `₹${w.formattedNet}`],
+                    ['Status', w.status],
+                    ['Stripe Account', w.driverId?.stripeConnectAccountId || 'Not linked'],
+                    ['Payouts Enabled', w.driverId?.stripePayoutsEnabled ? '✅ Yes' : '❌ No'],
+                    ['Stripe Transfer', w.stripeTransferId || '-'],
+                    ['Description', w.description || '-'],
+                    ['Failure Reason', w.failureReason || '-'],
+                    ['Created', new Date(w.createdAt).toLocaleString('en-IN')],
+                ];
+
+                document.getElementById('detailContent').innerHTML = rows.map(([label, val]) => `
+                    <div class="detail-row">
+                        <span class="detail-label">${label}</span>
+                        <span class="detail-value" style="max-width:260px;word-break:break-all;text-align:right;">${val}</span>
+                    </div>
+                `).join('');
+            } catch(e) {
+                document.getElementById('detailContent').innerHTML = `<p style="color:red;">Error: ${e.message}</p>`;
+            }
+        }
+
+        function closeModals() {
+            document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+        }
+
+        // Close on backdrop click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', e => {
+                if (e.target === overlay) closeModals();
+            });
+        });
+    </script>
+</body>
+</html>

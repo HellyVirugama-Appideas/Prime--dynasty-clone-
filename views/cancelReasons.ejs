@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<head>
+    <%- include('_layouts/head') %>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Two+Tone" rel="stylesheet">
+    <title>Cancellation Policy | <%= title %></title>
+    <style>
+        .policy-card { border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.10); margin-bottom: 24px; }
+        .policy-header { padding: 22px 26px; color: #fff; }
+        .header-ride { background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); }
+        .header-rent { background: linear-gradient(135deg, #26a69a 0%, #00897b 100%); }
+        .policy-header h5 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+        .policy-header p { margin: 6px 0 0; opacity: .85; font-size: .9rem; }
+        .policy-body { padding: 26px; }
+        .save-btn { height:44px; border-radius:24px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; font-weight:600; border:none; cursor:pointer; padding: 0 26px; box-shadow:0 4px 15px rgba(102,126,234,.4); }
+        .applies-pill { display:inline-block; padding:3px 10px; border-radius:14px; font-weight:700; font-size:.72rem; color:#fff; }
+        .pill-rent { background:#26a69a; }
+        .pill-ride { background:#ff9800; }
+        .pill-both { background:#7c4dff; }
+        .status-pill { display:inline-block; padding:3px 10px; border-radius:14px; font-weight:700; font-size:.72rem; }
+        .status-active { background:#e6f7ee; color:#1b8a4c; }
+        .status-inactive { background:#fdeaea; color:#c0392b; }
+        .row-actions form { display:inline-block; margin-right:6px; }
+        .row-actions button { background:none; border:none; cursor:pointer; padding:4px; }
+        .row-actions .edit-btn { color:#7c4dff; }
+        .row-actions .toggle-btn { color:#ff9800; }
+        .row-actions .delete-btn { color:#e53935; }
+        table.reason-table th { color:#666; font-size:.82rem; text-transform:uppercase; }
+        .other-badge { background:#eef; color:#556; padding:2px 8px; border-radius:10px; font-size:.72rem; margin-left:6px; }
+        .section-title { font-weight:700; color:#444; margin: 8px 0 16px; font-size:1.05rem; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Cancellation Policy</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item active">Cancellation Policy</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="container" style="margin-top:30px;">
+                <div class="row">
+                    <div class="col s12"><%- messages('messages', locals) %></div>
+                </div>
+
+                <!-- ==================== RIDE SECTION ==================== -->
+                <div class="row">
+                    <div class="col s12">
+                        <div class="card policy-card">
+                            <div class="policy-header header-ride">
+                                <h5><i class="material-icons" style="vertical-align:middle;margin-right:8px;">local_taxi</i>Ride Cancel Reasons</h5>
+                                <p>These show on the Ride "Cancel booking" screen only.</p>
+                            </div>
+                            <div class="policy-body">
+                                <!-- Add Ride reason -->
+                                <form method="POST" action="/admin/cancel-reasons">
+                                    <input type="hidden" name="appliesTo" value="ride">
+                                    <div class="row" style="margin-bottom:0;">
+                                        <div class="input-field col s12 m6">
+                                            <input id="ride_reason" name="reason" type="text" required>
+                                            <label for="ride_reason">Reason text (Ride)</label>
+                                        </div>
+                                        <div class="input-field col s6 m2">
+                                            <input id="ride_order" name="order" type="number" value="0">
+                                            <label for="ride_order" class="active">Display order</label>
+                                        </div>
+                                        <div class="input-field col s6 m2" style="padding-top:22px;">
+                                            <label>
+                                                <input type="checkbox" name="isOther" value="true" />
+                                                <span>Is "Other"</span>
+                                            </label>
+                                        </div>
+                                        <div class="col s6 m2" style="padding-top:14px;">
+                                            <button type="submit" class="save-btn">Add Ride</button>
+                                        </div>
+                                    </div>
+                                </form>
+
+                                <h6 class="section-title">All Ride Reasons</h6>
+                                <table class="reason-table striped responsive-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order</th>
+                                            <th>Reason</th>
+                                            <th>Applies</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% if (!rideReasons || rideReasons.length === 0) { %>
+                                        <tr><td colspan="5" class="center-align" style="color:#999;">No ride cancel reasons yet.</td></tr>
+                                        <% } else { %>
+                                            <% rideReasons.forEach(function(r) { %>
+                                            <tr>
+                                                <td><%= r.order %></td>
+                                                <td>
+                                                    <%= r.reason %>
+                                                    <% if (r.isOther) { %><span class="other-badge">Other</span><% } %>
+                                                </td>
+                                                <td><span class="applies-pill pill-<%= r.appliesTo %>"><%= r.appliesTo %></span></td>
+                                                <td>
+                                                    <span class="status-pill <%= r.isActive ? 'status-active' : 'status-inactive' %>">
+                                                        <%= r.isActive ? 'Active' : 'Disabled' %>
+                                                    </span>
+                                                </td>
+                                                <td class="row-actions">
+                                                    <button type="button" class="edit-btn" onclick="toggleEdit('<%= r._id %>')">
+                                                        <i class="material-icons">edit</i>
+                                                    </button>
+                                                    <form action="/admin/cancel-reasons/<%= r._id %>/toggle" method="POST">
+                                                        <button type="submit" class="toggle-btn" title="Enable/Disable">
+                                                            <i class="material-icons"><%= r.isActive ? 'toggle_on' : 'toggle_off' %></i>
+                                                        </button>
+                                                    </form>
+                                                    <form action="/admin/cancel-reasons/<%= r._id %>/delete" method="POST"
+                                                        onsubmit="return confirm('Delete this reason?');">
+                                                        <button type="submit" class="delete-btn">
+                                                            <i class="material-icons">delete</i>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            <tr id="edit-<%= r._id %>" style="display:none;">
+                                                <td colspan="5">
+                                                    <form action="/admin/cancel-reasons/<%= r._id %>/update" method="POST">
+                                                        <div class="row" style="margin-bottom:0;">
+                                                            <div class="input-field col s12 m5">
+                                                                <input type="text" name="reason" value="<%= r.reason %>" required>
+                                                            </div>
+                                                            <div class="input-field col s6 m2">
+                                                                <select name="appliesTo">
+                                                                    <option value="ride" <%= r.appliesTo==='ride' ? 'selected' : '' %>>Ride only</option>
+                                                                    <option value="rent" <%= r.appliesTo==='rent' ? 'selected' : '' %>>Rent only</option>
+                                                                    <option value="both" <%= r.appliesTo==='both' ? 'selected' : '' %>>Both</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="input-field col s6 m2">
+                                                                <input type="number" name="order" value="<%= r.order %>">
+                                                            </div>
+                                                            <div class="col s6 m2" style="padding-top:14px;">
+                                                                <label>
+                                                                    <input type="checkbox" name="isOther" value="true" <%= r.isOther ? 'checked' : '' %> />
+                                                                    <span>Is "Other"</span>
+                                                                </label>
+                                                            </div>
+                                                            <div class="col s6 m1" style="padding-top:8px;">
+                                                                <button type="submit" class="save-btn">Save</button>
+                                                            </div>
+                                                        </div>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            <% }) %>
+                                        <% } %>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== RENT SECTION ==================== -->
+                <div class="row">
+                    <div class="col s12">
+                        <div class="card policy-card">
+                            <div class="policy-header header-rent">
+                                <h5><i class="material-icons" style="vertical-align:middle;margin-right:8px;">directions_car</i>Rent Cancel Reasons</h5>
+                                <p>These show on the Rent "Cancel booking" screen only.</p>
+                            </div>
+                            <div class="policy-body">
+                                <!-- Add Rent reason -->
+                                <form method="POST" action="/admin/cancel-reasons">
+                                    <input type="hidden" name="appliesTo" value="rent">
+                                    <div class="row" style="margin-bottom:0;">
+                                        <div class="input-field col s12 m6">
+                                            <input id="rent_reason" name="reason" type="text" required>
+                                            <label for="rent_reason">Reason text (Rent)</label>
+                                        </div>
+                                        <div class="input-field col s6 m2">
+                                            <input id="rent_order" name="order" type="number" value="0">
+                                            <label for="rent_order" class="active">Display order</label>
+                                        </div>
+                                        <div class="input-field col s6 m2" style="padding-top:22px;">
+                                            <label>
+                                                <input type="checkbox" name="isOther" value="true" />
+                                                <span>Is "Other"</span>
+                                            </label>
+                                        </div>
+                                        <div class="col s6 m2" style="padding-top:14px;">
+                                            <button type="submit" class="save-btn">Add Rent</button>
+                                        </div>
+                                    </div>
+                                </form>
+
+                                <h6 class="section-title">All Rent Reasons</h6>
+                                <table class="reason-table striped responsive-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order</th>
+                                            <th>Reason</th>
+                                            <th>Applies</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% if (!rentReasons || rentReasons.length === 0) { %>
+                                        <tr><td colspan="5" class="center-align" style="color:#999;">No rent cancel reasons yet.</td></tr>
+                                        <% } else { %>
+                                            <% rentReasons.forEach(function(r) { %>
+                                            <tr>
+                                                <td><%= r.order %></td>
+                                                <td>
+                                                    <%= r.reason %>
+                                                    <% if (r.isOther) { %><span class="other-badge">Other</span><% } %>
+                                                </td>
+                                                <td><span class="applies-pill pill-<%= r.appliesTo %>"><%= r.appliesTo %></span></td>
+                                                <td>
+                                                    <span class="status-pill <%= r.isActive ? 'status-active' : 'status-inactive' %>">
+                                                        <%= r.isActive ? 'Active' : 'Disabled' %>
+                                                    </span>
+                                                </td>
+                                                <td class="row-actions">
+                                                    <button type="button" class="edit-btn" onclick="toggleEdit('<%= r._id %>')">
+                                                        <i class="material-icons">edit</i>
+                                                    </button>
+                                                    <form action="/admin/cancel-reasons/<%= r._id %>/toggle" method="POST">
+                                                        <button type="submit" class="toggle-btn" title="Enable/Disable">
+                                                            <i class="material-icons"><%= r.isActive ? 'toggle_on' : 'toggle_off' %></i>
+                                                        </button>
+                                                    </form>
+                                                    <form action="/admin/cancel-reasons/<%= r._id %>/delete" method="POST"
+                                                        onsubmit="return confirm('Delete this reason?');">
+                                                        <button type="submit" class="delete-btn">
+                                                            <i class="material-icons">delete</i>
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            <tr id="edit-<%= r._id %>" style="display:none;">
+                                                <td colspan="5">
+                                                    <form action="/admin/cancel-reasons/<%= r._id %>/update" method="POST">
+                                                        <div class="row" style="margin-bottom:0;">
+                                                            <div class="input-field col s12 m5">
+                                                                <input type="text" name="reason" value="<%= r.reason %>" required>
+                                                            </div>
+                                                            <div class="input-field col s6 m2">
+                                                                <select name="appliesTo">
+                                                                    <option value="rent" <%= r.appliesTo==='rent' ? 'selected' : '' %>>Rent only</option>
+                                                                    <option value="ride" <%= r.appliesTo==='ride' ? 'selected' : '' %>>Ride only</option>
+                                                                    <option value="both" <%= r.appliesTo==='both' ? 'selected' : '' %>>Both</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="input-field col s6 m2">
+                                                                <input type="number" name="order" value="<%= r.order %>">
+                                                            </div>
+                                                            <div class="col s6 m2" style="padding-top:14px;">
+                                                                <label>
+                                                                    <input type="checkbox" name="isOther" value="true" <%= r.isOther ? 'checked' : '' %> />
+                                                                    <span>Is "Other"</span>
+                                                                </label>
+                                                            </div>
+                                                            <div class="col s6 m1" style="padding-top:8px;">
+                                                                <button type="submit" class="save-btn">Save</button>
+                                                            </div>
+                                                        </div>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                            <% }) %>
+                                        <% } %>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+    <script>
+        function toggleEdit(id) {
+            const row = document.getElementById('edit-' + id);
+            if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        }
+    </script>
+</body>
+</html>

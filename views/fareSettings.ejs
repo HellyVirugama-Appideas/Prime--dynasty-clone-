@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<head>
+    <%- include('_layouts/head') %>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Two+Tone" rel="stylesheet">
+    <title>Fare Settings | <%= title %></title>
+    <style>
+        .fare-card { border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.10); margin-bottom: 24px; }
+        .fare-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 22px 26px; color: #fff; }
+        .fare-header h5 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+        .fare-header p { margin: 6px 0 0; opacity: .85; font-size: .9rem; }
+        .fare-body { padding: 26px; }
+        .trip-type-pill { display:inline-block; padding:3px 12px; border-radius:16px; font-weight:700; font-size:.78rem; color:#fff; }
+        .pill-short { background:#26a69a; }
+        .pill-medium { background:#ff9800; }
+        .pill-long { background:#e53935; }
+        .tier-row, .fee-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+        .tier-row .input-field, .fee-row .input-field { margin: 0; flex: 1; }
+        .remove-row-btn { color:#e53935; cursor:pointer; }
+        .add-row-btn { color:#7c4dff; cursor:pointer; font-weight:600; font-size:.9rem; }
+        .save-btn { width:100%; height:48px; border-radius:30px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; font-weight:600; font-size:1rem; border:none; cursor:pointer; margin-top:10px; box-shadow:0 4px 15px rgba(102,126,234,.4); }
+        .preview-table th, .preview-table td { padding: 8px 12px; }
+        .section-title { font-weight:700; color:#444; margin:0 0 14px; font-size:1rem; border-left:4px solid #7c4dff; padding-left:10px; }
+    </style>
+</head>
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+    <%- include('_layouts/sidenavbar') %>
+
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">Fare Settings</h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item active">Fare Settings</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="container" style="margin-top:30px;">
+                <div class="row">
+                    <div class="col s12"><%- messages('messages', locals) %></div>
+                </div>
+
+                <form method="POST" action="/admin/fare-settings">
+                    <div class="row">
+                        <!-- Trip Type Thresholds -->
+                        <div class="col s12 m6">
+                            <div class="card fare-card">
+                                <div class="fare-header">
+                                    <h5><i class="material-icons" style="vertical-align:middle;margin-right:8px;">route</i>Trip Type Thresholds</h5>
+                                    <p>System automatically classifies every trip as Short / Medium / Long by distance.</p>
+                                </div>
+                                <div class="fare-body">
+                                    <div class="row" style="margin-bottom:0;">
+                                        <div class="input-field col s12">
+                                            <input id="shortMaxDistanceKm" name="shortMaxDistanceKm" type="number" step="0.1" min="0.1"
+                                                value="<%= fareConfig.tripTypeThresholds.shortMaxDistanceKm %>" required>
+                                            <label for="shortMaxDistanceKm" class="active">Short trip: up to (km)</label>
+                                        </div>
+                                        <div class="input-field col s12">
+                                            <input id="mediumMaxDistanceKm" name="mediumMaxDistanceKm" type="number" step="0.1" min="0.1"
+                                                value="<%= fareConfig.tripTypeThresholds.mediumMaxDistanceKm %>" required>
+                                            <label for="mediumMaxDistanceKm" class="active">Medium trip: up to (km) — beyond this is Long</label>
+                                        </div>
+                                    </div>
+                                    <p style="color:#888;font-size:.85rem;margin-top:6px;">
+                                        e.g. 0–<span id="lblShort">8</span> km = <span class="trip-type-pill pill-short">Short</span>,
+                                        <span id="lblShortPlus">8.1</span>–<span id="lblMedium">24</span> km = <span class="trip-type-pill pill-medium">Medium</span>,
+                                        above <span id="lblMediumPlus">24</span> km = <span class="trip-type-pill pill-long">Long</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Base Fare per Trip Type -->
+                        <div class="col s12 m6">
+                            <div class="card fare-card">
+                                <div class="fare-header">
+                                    <h5><i class="material-icons" style="vertical-align:middle;margin-right:8px;">attach_money</i>Base Fare per Trip Type</h5>
+                                    <p>Flat starting fare charged based on the classified trip type.</p>
+                                </div>
+                                <div class="fare-body">
+                                    <div class="row" style="margin-bottom:0;">
+                                        <div class="input-field col s4">
+                                            <input id="baseFareShort" name="baseFareShort" type="number" step="0.01" min="0"
+                                                value="<%= fareConfig.baseFare.short %>" required>
+                                            <label for="baseFareShort" class="active">Short ($)</label>
+                                        </div>
+                                        <div class="input-field col s4">
+                                            <input id="baseFareMedium" name="baseFareMedium" type="number" step="0.01" min="0"
+                                                value="<%= fareConfig.baseFare.medium %>" required>
+                                            <label for="baseFareMedium" class="active">Medium ($)</label>
+                                        </div>
+                                        <div class="input-field col s4">
+                                            <input id="baseFareLong" name="baseFareLong" type="number" step="0.01" min="0"
+                                                value="<%= fareConfig.baseFare.long %>" required>
+                                            <label for="baseFareLong" class="active">Long ($)</label>
+                                        </div>
+                                    </div>
+                                    <p style="color:#888;font-size:.85rem;">Short trips do not include distance-based pricing (Base Fare only).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- Per-Mile Rate Tiers -->
+                        <div class="col s12 m7">
+                            <div class="card fare-card">
+                                <div class="fare-header">
+                                    <h5><i class="material-icons" style="vertical-align:middle;margin-right:8px;">timeline</i>Distance-Based Rate Tiers</h5>
+                                    <p>Applies to Medium &amp; Long trips only. Set 0 for the "and above" final tier.</p>
+                                </div>
+                                <div class="fare-body">
+                                    <div id="tierRows">
+                                        <% fareConfig.perMileRateTiers.forEach(function(tier) { %>
+                                        <div class="tier-row">
+                                            <div class="input-field">
+                                                <input type="number" step="0.1" min="0" name="tierUpToMiles" placeholder="Up to (miles), 0 = and above" value="<%= tier.upToMiles %>">
+                                            </div>
+                                            <div class="input-field">
+                                                <input type="number" step="0.01" min="0" name="tierRatePerMile" placeholder="Rate per mile ($)" value="<%= tier.ratePerMile %>" required>
+                                            </div>
+                                            <i class="material-icons remove-row-btn" onclick="this.closest('.tier-row').remove()">delete</i>
+                                        </div>
+                                        <% }) %>
+                                    </div>
+                                    <span class="add-row-btn" onclick="addTierRow()">+ Add tier</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fees -->
+                        <div class="col s12 m5">
+                            <div class="card fare-card">
+                                <div class="fare-header">
+                                    <h5><i class="material-icons" style="vertical-align:middle;margin-right:8px;">receipt_long</i>Fees</h5>
+                                    <p>Enabled fees are summed into the fare breakup shown to users.</p>
+                                </div>
+                                <div class="fare-body">
+                                    <div id="feeRows">
+                                        <% fareConfig.fees.forEach(function(fee, idx) { %>
+                                        <div class="fee-row">
+                                            <label style="min-width:26px;">
+                                                <input type="checkbox" name="feeEnabled" value="<%= idx %>" <%= fee.enabled ? 'checked' : '' %> />
+                                                <span></span>
+                                            </label>
+                                            <div class="input-field">
+                                                <input type="text" name="feeName" value="<%= fee.name %>" placeholder="Fee name" required>
+                                            </div>
+                                            <div class="input-field">
+                                                <input type="number" step="0.01" min="0" name="feeAmount" value="<%= fee.amount %>" placeholder="Amount ($)" required>
+                                            </div>
+                                            <i class="material-icons remove-row-btn" onclick="this.closest('.fee-row').remove()">delete</i>
+                                        </div>
+                                        <% }) %>
+                                    </div>
+                                    <span class="add-row-btn" onclick="addFeeRow()">+ Add fee</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col s12 m6 offset-m3">
+                            <button type="submit" class="save-btn">Save Fare Settings</button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Live formula preview -->
+                <div class="row">
+                    <div class="col s12">
+                        <p class="section-title">Preview — Total Fare = Base Fare + (Per-Mile Charge x Distance) + Fees</p>
+                        <table class="preview-table striped">
+                            <thead>
+                                <tr><th>Distance</th><th>Trip Type</th><th>Base Fare</th><th>Distance Charge</th><th>Fees</th><th>Estimated Total</th></tr>
+                            </thead>
+                            <tbody>
+                                <% preview.forEach(function(p) { %>
+                                <tr>
+                                    <td><%= p.distanceKm %> km (<%= p.distanceMiles %> mi)</td>
+                                    <td><span class="trip-type-pill pill-<%= p.tripType.toLowerCase() %>"><%= p.tripType %></span></td>
+                                    <td>$<%= p.baseFare.toFixed(2) %></td>
+                                    <td>$<%= p.distanceCharge.toFixed(2) %></td>
+                                    <td>$<%= p.platformFee.toFixed(2) %></td>
+                                    <td><strong>$<%= p.estimatedTotal.toFixed(2) %></strong></td>
+                                </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%- include('_layouts/commonJs') %>
+    <script>
+        function addTierRow() {
+            const div = document.createElement('div');
+            div.className = 'tier-row';
+            div.innerHTML = `
+                <div class="input-field"><input type="number" step="0.1" min="0" name="tierUpToMiles" placeholder="Up to (miles), 0 = and above"></div>
+                <div class="input-field"><input type="number" step="0.01" min="0" name="tierRatePerMile" placeholder="Rate per mile ($)" required></div>
+                <i class="material-icons remove-row-btn" onclick="this.closest('.tier-row').remove()">delete</i>`;
+            document.getElementById('tierRows').appendChild(div);
+        }
+        function addFeeRow() {
+            const idx = document.querySelectorAll('#feeRows .fee-row').length;
+            const div = document.createElement('div');
+            div.className = 'fee-row';
+            div.innerHTML = `
+                <label style="min-width:26px;"><input type="checkbox" name="feeEnabled" value="${idx}" checked/><span></span></label>
+                <div class="input-field"><input type="text" name="feeName" placeholder="Fee name" required></div>
+                <div class="input-field"><input type="number" step="0.01" min="0" name="feeAmount" placeholder="Amount ($)" required></div>
+                <i class="material-icons remove-row-btn" onclick="this.closest('.fee-row').remove()">delete</i>`;
+            document.getElementById('feeRows').appendChild(div);
+        }
+        function syncLabels() {
+            const s = document.getElementById('shortMaxDistanceKm').value || 0;
+            const m = document.getElementById('mediumMaxDistanceKm').value || 0;
+            document.getElementById('lblShort').innerText = s;
+            document.getElementById('lblShortPlus').innerText = (parseFloat(s) + 0.1).toFixed(1);
+            document.getElementById('lblMedium').innerText = m;
+            document.getElementById('lblMediumPlus').innerText = m;
+        }
+        document.getElementById('shortMaxDistanceKm').addEventListener('input', syncLabels);
+        document.getElementById('mediumMaxDistanceKm').addEventListener('input', syncLabels);
+        syncLabels();
+    </script>
+</body>
+</html>
