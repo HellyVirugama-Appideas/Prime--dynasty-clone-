@@ -12,7 +12,7 @@ if (!admin.apps.length) {
     try {
         // const serviceAccount = require('./primeride-df400-firebase-adminsdk-fbsvc-483e5c7f80.json');
 
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
