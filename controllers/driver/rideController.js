@@ -1381,7 +1381,7 @@ const FareConfig = require('../../models/fareConfigModel');
 const { calculateFare, getActiveFareConfig } = require('../../utils/fareEngine');
 const { autoApplyProgressRewards } = require('../../utils/rewardAutoApply');
 const { applyReferralReward } = require('../../utils/referralReward');
-const { processRideCompletion } = require('../../utils/incentiveService');
+const { processRideCompletion } = require('../../utils/Incentiveservice');
 
 
 // exports.getRides = async (req, res, next) => {
