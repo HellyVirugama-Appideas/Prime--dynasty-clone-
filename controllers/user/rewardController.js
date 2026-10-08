@@ -4,7 +4,9 @@
 // const Charges = require('../../models/chargesModel');
 // const UserOfferProgress = require('../../models/userOfferProgressModel');
 // const Ride = require('../../models/rideModel');
-// const { autoApplyProgressRewards } = require('../../utils/rewardAutoApply');
+// const Wallet = require('../../models/wallet');
+// const User = require("../../models/userModel.js")
+// const { autoApplyProgressRewards, getRideCountInPeriod } = require('../../utils/rewardAutoApply');
 
 
 // // ✅ List offers (green = usable, red = expired/used-up) — for "My Rewards" screen
@@ -283,38 +285,26 @@
 //             return item;
 //         }));
  
-//         res.json({ code: '1', message: req.t('success'), offers: formatted });
+//         // ✅ WALLET BALANCE — autoApply ke BAAD calculate hota hai, isliye abhi credit hua reward bhi include hai.
+//         // Logic Paymentcontroller jaisa hi: completed 'add' minus completed 'use' (paise -> dollar).
+//         const walletAgg = await Wallet.aggregate([
+//             { $match: { userId, status: 'completed', type: { $in: ['add', 'use'] } } },
+//             {
+//                 $group: {
+//                     _id: null,
+//                     total: { $sum: { $cond: [{ $eq: ['$type', 'add'] }, '$amount', { $multiply: ['$amount', -1] }] } },
+//                 },
+//             },
+//         ]);
+//         const walletBalance = (walletAgg[0]?.total || 0) / 100;
+
+//         res.json({ code: '1', message: req.t('success'), walletBalance, offers: formatted });
 //     } catch (error) {
 //         next(error);
 //     }
 // };
 
-// // Helper — completed rides count in the current week/month window.
-// // IMPORTANT: field names MUST match the Ride schema exactly —
-// // it's `user` (not `userId`) and status is `'Completed'` (capital C).
-// async function getRideCountInPeriod(userId, periodType, validFrom, validTo) {
-//     const now = new Date();
-//     let start;
-
-//     if (periodType === 'month') {
-//         start = new Date(now.getFullYear(), now.getMonth(), 1);
-//     } else if (periodType === 'week') {
-//         const day = now.getDay();
-//         start = new Date(now);
-//         start.setDate(now.getDate() - day);
-//         start.setHours(0, 0, 0, 0);
-//     } else {
-//         start = new Date(validFrom);
-//     }
-
-//     const end = new Date(Math.min(now.getTime(), new Date(validTo).getTime()));
-
-//     return Ride.countDocuments({
-//         user: userId,
-//         status: 'Completed',
-//         createdAt: { $gte: start, $lte: end },
-//     });
-// }
+// // getRideCountInPeriod ab utils/rewardAutoApply.js se aata hai (ek hi logic, dono jagah same).
 
 // // Called from Driver's completeRide once a ride is marked Completed —
 // // advances progress for every active 'progress' type offer.
@@ -448,16 +438,42 @@
 //     }
 // };
 
+
+
 // // ✅ Refer & Earn details — user ka referral code + program config
 // exports.getReferEarn = async (req, res, next) => {
 //     try {
 //         const charges = await Charges.findOne();
 
+//         // req.user me select() ki wajah se field na aaye, isliye DB se seedha lo
+//         const dbUser = await User.findById(req.user._id).select('name myReferralCode');
+//         let referralCode = dbUser?.myReferralCode || null;
+
+//         // Pehli baar (ya purane users) — unique code generate karke save karo
+//         if (!referralCode && dbUser) {
+//             const prefix = String(dbUser.name || 'USER').replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4).padEnd(4, 'X');
+//             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+//             for (let attempt = 0; attempt < 10 && !referralCode; attempt++) {
+//                 let suffix = '';
+//                 for (let k = 0; k < 4; k++) suffix += chars[Math.floor(Math.random() * chars.length)];
+//                 const candidate = prefix + suffix;
+//                 const exists = await User.exists({ myReferralCode: candidate });
+//                 if (!exists) {
+//                     try {
+//                         await User.updateOne({ _id: dbUser._id }, { $set: { myReferralCode: candidate } });
+//                         referralCode = candidate;
+//                     } catch (e) {
+//                         if (e.code !== 11000) throw e; // duplicate -> dobara try
+//                     }
+//                 }
+//             }
+//         }
+
 //         res.json({
 //             code: '1',
 //             message: req.t('success'),
 //             data: {
-//                 referralCode: req.user.referralCode || null,
+//                 referralCode,
 //                 minimumFare: Number(charges?.referralMinFare) || 0,
 //                 earnValue: Number(charges?.referralEarnValue) || 0,
 //             },
@@ -468,6 +484,56 @@
 //     }
 // };
 
+// // // ✅ Reward History — with overall total saved (across all pages)
+// // exports.getRewardHistory = async (req, res, next) => {
+// //     try {
+// //         const { page = 1, limit = 20 } = req.query;
+// //         const skip = (page - 1) * limit;
+
+// //         const [redemptions, total, totalAgg] = await Promise.all([
+// //             OfferRedemption.find({ userId: req.user.id })
+// //                 .populate('offerId', 'title code image discountType discountValue')
+// //                 .sort('-createdAt')
+// //                 .skip(skip)
+// //                 .limit(parseInt(limit))
+// //                 .lean(),
+// //             OfferRedemption.countDocuments({ userId: req.user.id }),
+// //             OfferRedemption.aggregate([
+// //                 { $match: { userId: req.user._id } },
+// //                 { $group: { _id: null, total: { $sum: '$discountAmount' } } },
+// //             ]),
+// //         ]);
+
+// //         const history = redemptions.map(r => ({
+// //             _id: r._id,
+// //             offerTitle: r.offerId?.title || 'Offer',
+// //             offerCode: r.offerId?.code || null,
+// //             offerImage: r.offerId?.image || null,
+// //             discountAmount: r.discountAmount,
+// //             usedOn: r.referenceType,
+// //             referenceId: r.referenceId,
+// //             date: r.createdAt,
+// //         }));
+
+// //         res.json({
+// //             code: '1',
+// //             message: req.t('success'),
+// //             totalSaved: totalAgg[0]?.total || 0,   // ✅ overall total, sab redemptions ka
+// //             history,
+// //             pagination: {
+// //                 currentPage: parseInt(page),
+// //                 totalPages: Math.ceil(total / limit),
+// //                 totalRecords: total,
+// //                 hasMore: skip + history.length < total,
+// //             },
+// //         });
+// //     } catch (error) {
+// //         console.error('❌ getRewardHistory Error:', error);
+// //         next(error);
+// //     }
+// // };
+
+
 // // ✅ Reward History — with overall total saved (across all pages)
 // exports.getRewardHistory = async (req, res, next) => {
 //     try {
@@ -476,7 +542,7 @@
 
 //         const [redemptions, total, totalAgg] = await Promise.all([
 //             OfferRedemption.find({ userId: req.user.id })
-//                 .populate('offerId', 'title code image discountType discountValue')
+//                 .populate('offerId') // offer ka poora data (description, validity, progress fields, sab kuch)
 //                 .sort('-createdAt')
 //                 .skip(skip)
 //                 .limit(parseInt(limit))
@@ -488,16 +554,60 @@
 //             ]),
 //         ]);
 
-//         const history = redemptions.map(r => ({
-//             _id: r._id,
-//             offerTitle: r.offerId?.title || 'Offer',
-//             offerCode: r.offerId?.code || null,
-//             offerImage: r.offerId?.image || null,
-//             discountAmount: r.discountAmount,
-//             usedOn: r.referenceType,
-//             referenceId: r.referenceId,
-//             date: r.createdAt,
-//         }));
+//         const history = redemptions.map(r => {
+//             const o = r.offerId || null;
+//             return {
+//                 _id: r._id,
+
+//                 // purane flat fields (app me use ho rahe hon to break na ho)
+//                 offerTitle: o?.title || 'Offer',
+//                 offerCode: o?.code || null,
+//                 offerImage: o?.image || null,
+//                 discountAmount: r.discountAmount,
+//                 usedOn: r.referenceType,
+//                 referenceId: r.referenceId,
+//                 date: r.createdAt,
+
+//                 // redemption ka poora data
+//                 offerId: o?._id || null,
+//                 userId: r.userId,
+//                 referenceType: r.referenceType,
+//                 createdAt: r.createdAt,
+//                 updatedAt: r.updatedAt,
+
+//                 // offer ka poora data
+//                 offerDescription: o?.description || null,
+//                 offer: o
+//                     ? {
+//                           _id: o._id,
+//                           title: o.title,
+//                           code: o.code,
+//                           image: o.image,
+//                           description: o.description,
+//                           offerType: o.offerType || 'coupon',
+//                           discountType: o.discountType,
+//                           discountValue: o.discountValue,
+//                           maxDiscount: o.maxDiscount,
+//                           minOrderAmount: o.minOrderAmount,
+//                           applicableOn: o.applicableOn,
+//                           validFrom: o.validFrom,
+//                           validTo: o.validTo,
+//                           usageLimitPerUser: o.usageLimitPerUser,
+//                           totalUsageLimit: o.totalUsageLimit,
+//                           totalUsedCount: o.totalUsedCount,
+//                           isActive: o.isActive,
+//                           // progress-reward offers ke liye
+//                           progressType: o.progressType || null,
+//                           periodType: o.periodType || null,
+//                           targetCount: o.targetCount || 0,
+//                           rewardValue: o.rewardValue || 0,
+//                           rewardType: o.rewardType || null,
+//                           timeWindowStart: o.timeWindowStart || null,
+//                           timeWindowEnd: o.timeWindowEnd || null,
+//                       }
+//                     : null,
+//             };
+//         });
 
 //         res.json({
 //             code: '1',
@@ -519,6 +629,7 @@
 
 
 
+
 const createError = require('http-errors');
 const Offer = require('../../models/offerModel');
 const OfferRedemption = require('../../models/offerRedemptionModel.js');
@@ -526,7 +637,8 @@ const Charges = require('../../models/chargesModel');
 const UserOfferProgress = require('../../models/userOfferProgressModel');
 const Ride = require('../../models/rideModel');
 const Wallet = require('../../models/wallet');
-const User = require("../../models/userModel.js")
+const User = require('../../models/userModel');
+const { generateUniqueReferralCode } = require('../../utils/referralCode');
 const { autoApplyProgressRewards, getRideCountInPeriod } = require('../../utils/rewardAutoApply');
 
 
@@ -959,8 +1071,6 @@ exports.applyOffer = async (req, res, next) => {
     }
 };
 
-
-
 // ✅ Refer & Earn details — user ka referral code + program config
 exports.getReferEarn = async (req, res, next) => {
     try {
@@ -972,31 +1082,74 @@ exports.getReferEarn = async (req, res, next) => {
 
         // Pehli baar (ya purane users) — unique code generate karke save karo
         if (!referralCode && dbUser) {
-            const prefix = String(dbUser.name || 'USER').replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4).padEnd(4, 'X');
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            for (let attempt = 0; attempt < 10 && !referralCode; attempt++) {
-                let suffix = '';
-                for (let k = 0; k < 4; k++) suffix += chars[Math.floor(Math.random() * chars.length)];
-                const candidate = prefix + suffix;
-                const exists = await User.exists({ myReferralCode: candidate });
-                if (!exists) {
-                    try {
-                        await User.updateOne({ _id: dbUser._id }, { $set: { myReferralCode: candidate } });
-                        referralCode = candidate;
-                    } catch (e) {
-                        if (e.code !== 11000) throw e; // duplicate -> dobara try
-                    }
-                }
+            const candidate = await generateUniqueReferralCode(dbUser.name);
+            if (candidate) {
+                await User.updateOne({ _id: dbUser._id }, { $set: { myReferralCode: candidate } });
+                referralCode = candidate;
             }
         }
+
+        const minimumFare = Number(charges?.referralMinFare) || 0;
+        const earnValue = Number(charges?.referralEarnValue) || 0;
+        const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+        // Referral link — env me REFERRAL_LINK_BASE (app/web link) set karo, e.g. https://prime.app/invite
+        const linkBase = (process.env.REFERRAL_LINK_BASE || `${req.protocol}://${req.get('host')}/invite`).replace(/\/$/, '');
+        const referralLink = referralCode ? `${linkBase}?ref=${referralCode}` : null;
+
+        // Stats: kitne log is code se aaye, kitno ki first ride ho gayi, aur total earning
+        const [totalReferrals, successfulReferrals, earnedAgg] = await Promise.all([
+            User.countDocuments({ referredBy: req.user._id }),
+            User.countDocuments({ referredBy: req.user._id, referralRewarded: true }),
+            Wallet.aggregate([
+                {
+                    $match: {
+                        userId: req.user._id,
+                        type: 'add',
+                        status: 'completed',
+                        description: /^Referral bonus - friend completed first ride/,
+                    },
+                },
+                { $group: { _id: null, total: { $sum: '$amount' } } },
+            ]),
+        ]);
+        const totalEarned = (earnedAgg[0]?.total || 0) / 100;
 
         res.json({
             code: '1',
             message: req.t('success'),
             data: {
+                // purane keys (app me already use ho rahe hon to break na ho)
                 referralCode,
-                minimumFare: Number(charges?.referralMinFare) || 0,
-                earnValue: Number(charges?.referralEarnValue) || 0,
+                minimumFare,
+                earnValue,
+
+                // UI ke liye
+                referralLink,
+                currency: '$',
+                shareMessage: referralCode
+                    ? `Join me on Prime! Use my referral code ${referralCode} or this link: ${referralLink}. Complete your first ride (minimum $${fmt(minimumFare)} fare) and we both earn $${fmt(earnValue)} ride credit.`
+                    : null,
+                steps: [
+                    {
+                        step: 1,
+                        title: 'Invite your friend to download the app using your referral link',
+                    },
+                    {
+                        step: 2,
+                        title: 'Your friend completes their first ride',
+                        subtitle: `(minimum $${fmt(minimumFare)} fare)`,
+                    },
+                    {
+                        step: 3,
+                        title: `You earn $${fmt(earnValue)} ride credit once the trip is successfully completed`,
+                    },
+                ],
+
+                // stats
+                totalReferrals,
+                successfulReferrals,
+                totalEarned,
             },
         });
     } catch (error) {
@@ -1004,56 +1157,6 @@ exports.getReferEarn = async (req, res, next) => {
         next(error);
     }
 };
-
-// // ✅ Reward History — with overall total saved (across all pages)
-// exports.getRewardHistory = async (req, res, next) => {
-//     try {
-//         const { page = 1, limit = 20 } = req.query;
-//         const skip = (page - 1) * limit;
-
-//         const [redemptions, total, totalAgg] = await Promise.all([
-//             OfferRedemption.find({ userId: req.user.id })
-//                 .populate('offerId', 'title code image discountType discountValue')
-//                 .sort('-createdAt')
-//                 .skip(skip)
-//                 .limit(parseInt(limit))
-//                 .lean(),
-//             OfferRedemption.countDocuments({ userId: req.user.id }),
-//             OfferRedemption.aggregate([
-//                 { $match: { userId: req.user._id } },
-//                 { $group: { _id: null, total: { $sum: '$discountAmount' } } },
-//             ]),
-//         ]);
-
-//         const history = redemptions.map(r => ({
-//             _id: r._id,
-//             offerTitle: r.offerId?.title || 'Offer',
-//             offerCode: r.offerId?.code || null,
-//             offerImage: r.offerId?.image || null,
-//             discountAmount: r.discountAmount,
-//             usedOn: r.referenceType,
-//             referenceId: r.referenceId,
-//             date: r.createdAt,
-//         }));
-
-//         res.json({
-//             code: '1',
-//             message: req.t('success'),
-//             totalSaved: totalAgg[0]?.total || 0,   // ✅ overall total, sab redemptions ka
-//             history,
-//             pagination: {
-//                 currentPage: parseInt(page),
-//                 totalPages: Math.ceil(total / limit),
-//                 totalRecords: total,
-//                 hasMore: skip + history.length < total,
-//             },
-//         });
-//     } catch (error) {
-//         console.error('❌ getRewardHistory Error:', error);
-//         next(error);
-//     }
-// };
-
 
 // ✅ Reward History — with overall total saved (across all pages)
 exports.getRewardHistory = async (req, res, next) => {
@@ -1147,4 +1250,3 @@ exports.getRewardHistory = async (req, res, next) => {
         next(error);
     }
 };
-
