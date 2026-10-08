@@ -638,7 +638,7 @@ const UserOfferProgress = require('../../models/userOfferProgressModel');
 const Ride = require('../../models/rideModel');
 const Wallet = require('../../models/wallet');
 const User = require('../../models/userModel');
-const { generateUniqueReferralCode } = require('../../utils/referralCode');
+const { generateUniqueReferralCode } = require('../../utils/Referralcode.js');
 const { autoApplyProgressRewards, getRideCountInPeriod } = require('../../utils/rewardAutoApply');
 
 
