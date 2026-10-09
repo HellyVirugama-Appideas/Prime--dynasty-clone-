@@ -1237,13 +1237,23 @@ exports.approveDriver = async (req, res) => {
 //             return res.redirect('/admin/driver');
 //         }
 
-//         // Delete uploaded files
-//         const files = [driver.profile, driver.licence, driver.pan, driver.rc]
-//             .filter(Boolean)
-//             .map(path => `public${path}`);
-//         files.forEach(file => deleteFile(file));
+//         // Soft delete the driver
+//         driver.isDeleted = true;
+//         driver.blocked = true;          // optional but recommended
+//         // driver.approved = false;     // optional
+//         await driver.save();
 
-//         await Driver.findByIdAndDelete(req.params.id);
+//         // Soft-delete ALL cars of this driver (so they stop appearing in rentals)
+//         await Car.updateMany(
+//             { driver: driver._id },
+//             { isDeleted: true }
+//         );
+
+//         // Optional: delete files only if you really want (for soft-delete we usually keep them)
+//         // const files = [driver.profile, driver.licence, driver.pan, driver.rc]
+//         //     .filter(Boolean)
+//         //     .map(path => `public${path}`);
+//         // files.forEach(file => deleteFile(file));
 
 //         req.flash('green', `'${driver.name}' deleted successfully.`);
 //         res.redirect('/admin/driver');
@@ -1261,32 +1271,32 @@ exports.deleteDriver = async (req, res) => {
             return res.redirect('/admin/driver');
         }
 
-        // Soft delete the driver
-        driver.isDeleted = true;
-        driver.blocked = true;          // optional but recommended
-        // driver.approved = false;     // optional
-        await driver.save();
+        // Optional: Delete associated files from storage
+        const files = [driver.profile, driver.licence, driver.pan, driver.rc]
+            .filter(Boolean)
+            .map(path => `public${path}`);
+        files.forEach(file => {
+            try {
+                deleteFile(file);   // make sure deleteFile is imported/available
+            } catch (err) {
+                console.error('Error deleting file:', file, err);
+            }
+        });
 
-        // Soft-delete ALL cars of this driver (so they stop appearing in rentals)
-        await Car.updateMany(
-            { driver: driver._id },
-            { isDeleted: true }
-        );
+        // Hard delete all cars of this driver
+        await Car.deleteMany({ driver: driver._id });
 
-        // Optional: delete files only if you really want (for soft-delete we usually keep them)
-        // const files = [driver.profile, driver.licence, driver.pan, driver.rc]
-        //     .filter(Boolean)
-        //     .map(path => `public${path}`);
-        // files.forEach(file => deleteFile(file));
+        // Hard delete the driver
+        await Driver.findByIdAndDelete(driver._id);
+        // or: await driver.deleteOne();
 
-        req.flash('green', `'${driver.name}' deleted successfully.`);
+        req.flash('green', `'${driver.name}' deleted permanently.`);
         res.redirect('/admin/driver');
     } catch (error) {
         req.flash('red', error.message);
         res.redirect('/admin/driver');
     }
 };
-
 exports.viewDriver = async (req, res) => {
     try {
         const driverId = req.params.id;
