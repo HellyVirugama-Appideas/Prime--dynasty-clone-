@@ -848,7 +848,7 @@
 
 
 const { promisify } = require('util');
-const { generateUniqueReferralCode } = require('../../utils/referralCode');
+const { generateUniqueReferralCode } = require('../../utils/Referralcode');
 const createError = require('http-errors');
 // const validator = require('validator');
 const jwt = require('jsonwebtoken');
