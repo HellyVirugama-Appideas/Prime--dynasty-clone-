@@ -329,8 +329,8 @@ const driverSchema = new mongoose.Schema(
         },
         profile: {
             type: String,
-            // default:
-            //     'https://dynasty-bucket.s3.ca-central-1.amazonaws.com/default_user.jpg',
+            default:
+                'https://dynasty-bucket.s3.ca-central-1.amazonaws.com/default_user.jpg',
         },
         licence: String,
         pan: String,

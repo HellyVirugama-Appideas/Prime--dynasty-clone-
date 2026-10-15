@@ -1,4 +1,5 @@
 // const { promisify } = require('util');
+// const { generateUniqueReferralCode } = require('../../utils/Referralcode');
 // const createError = require('http-errors');
 // // const validator = require('validator');
 // const jwt = require('jsonwebtoken');
@@ -279,6 +280,18 @@
 //             return next(createError.BadRequest('Invalid city or country'));
 //         }
 
+//         // 3.5 Referral code validate (optional) — sirf kisi user ka asli referral code hi chalega
+//         let referrer = null;
+//         const enteredCode = referralCode ? String(referralCode).trim().toUpperCase() : '';
+//         if (enteredCode) {
+//             referrer = await User.findOne({ myReferralCode: enteredCode }).select('_id name');
+//             if (!referrer) {
+//                 // Code pehle kisi ne use kar liya (use hone par referrer ko naya code mil jata hai) ya galat hai
+//                 const alreadyUsed = await User.exists({ referralCode: enteredCode });
+//                 return next(createError.BadRequest(alreadyUsed ? 'This referral code has already been used' : 'Invalid referral code'));
+//             }
+//         }
+
 //         // 4. Handle file uploads
 //         const profile = req.files?.profile?.[0]
 //             ? `/uploads/${req.files.profile[0].filename}`
@@ -298,7 +311,9 @@
 //             phone: decoded.phone,
 //             city: city?.id,
 //             country: country?.id,
-//             referralCode: referralCode || undefined,   // optional
+//             referralCode: enteredCode || undefined,    // jo code user ne daala
+//             referredBy: referrer ? referrer._id : undefined, // kisne refer kiya
+//             myReferralCode: await generateUniqueReferralCode(name), // is user ka apna code
 //             profile,
 //             licenseFront,
 //             licenseBack,
@@ -320,9 +335,35 @@
 //         await user.validate();
 //         await address.validate();
 
+//         // 7.5 Referral code SIRF EK BAAR — atomic claim: referrer ka code turant naya code se badal do.
+//         // Do log ek saath same code use karein to sirf ek ko milega, dusre ko 'already used' error.
+//         let usedCodeClaim = null; // { referrerId, newCode } — save fail hone par wapas karne ke liye
+//         if (referrer) {
+//             const newCode = await generateUniqueReferralCode(referrer.name);
+//             const claimed = await User.findOneAndUpdate(
+//                 { _id: referrer._id, myReferralCode: enteredCode },
+//                 { $set: { myReferralCode: newCode } }
+//             );
+//             if (!claimed) {
+//                 return next(createError.BadRequest('This referral code has already been used'));
+//             }
+//             usedCodeClaim = { referrerId: referrer._id, newCode };
+//         }
+
 //         // 8. Link address & save
 //         user.address = address.id;
-//         await Promise.all([user.save(), address.save()]);
+//         try {
+//             await Promise.all([user.save(), address.save()]);
+//         } catch (saveErr) {
+//             // signup fail hua to code wapas free kar do
+//             if (usedCodeClaim) {
+//                 await User.updateOne(
+//                     { _id: usedCodeClaim.referrerId, myReferralCode: usedCodeClaim.newCode },
+//                     { $set: { myReferralCode: enteredCode } }
+//                 );
+//             }
+//             throw saveErr;
+//         }
 
 //         // 9. Generate token & populate
 //         const token = await user.generateAuthToken();
@@ -805,8 +846,9 @@
 //     }
 // };
 
+
 const { promisify } = require('util');
-const { generateUniqueReferralCode } = require('../../utils/Referralcode');
+const { generateUniqueReferralCode } = require('../../utils/referralCode');
 const createError = require('http-errors');
 // const validator = require('validator');
 const jwt = require('jsonwebtoken');
@@ -844,6 +886,11 @@ exports.checkUser = async (req, res, next) => {
     }
 };
 
+// "+91" / "91" / " 91" aur phone ke spaces jaise formats ka farak hata kar ek hi key banata hai,
+// taaki send_otp aur verify_otp me thoda alag format bhejne par bhi OTP match ho.
+const normalizeMobile = (country_code, phone) =>
+    String(country_code || '').replace(/\D/g, '') + String(phone || '').replace(/\D/g, '');
+
 exports.sendOTP = async (req, res, next) => {
     try {
         const { country_code, phone } = req.body;
@@ -853,7 +900,7 @@ exports.sendOTP = async (req, res, next) => {
             return next(createError.BadRequest('validation.country_code'));
         if (!phone) return next(createError.BadRequest('validation.phone'));
 
-        const mobile = country_code + phone;
+        const mobile = normalizeMobile(country_code, phone);
         // if (!validator.isMobilePhone(mobile, 'any'))
         //     return next(createError.BadRequest('validation.mobileInvalid'));
 
@@ -928,16 +975,19 @@ exports.sendOTP = async (req, res, next) => {
 exports.verifyOTP = async (req, res, next) => {
     try {
         const { country_code, phone, otp } = req.body;
-        const mobile = country_code + phone;
+        const mobile = normalizeMobile(country_code, phone);
 
         // verify otp
-        const otpVerified = await OTP.findOne({ mobile, otp });
+        const otpVerified = await OTP.findOne({ mobile, otp: String(otp || '').trim() });
         if (!otpVerified) return next(createError.BadRequest('otp.fail'));
 
         // if userExists, login else send verifyToken
-        const userExists = await User.findOne({ country_code, phone }).select(
-            '-__v'
-        );
+        // (admin ne country code "+91" se user banaya ho aur app "91" bheje — dono match honge)
+        const ccDigits = String(country_code || '').replace(/\D/g, '');
+        const userExists = await User.findOne({
+            country_code: { $in: [country_code, ccDigits, '+' + ccDigits] },
+            phone: String(phone || '').trim(),
+        }).select('-__v');
         if (userExists) {
             userExists.fcmToken = req.body.fcmToken;
             await userExists.save();
