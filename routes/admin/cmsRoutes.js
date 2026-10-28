@@ -7,6 +7,11 @@ router
     .get(cmsController.getTerms)
     .post(cmsController.postTerms);
 
+router
+    .route('/privacy')
+    .get(cmsController.getPrivacy)
+    .post(cmsController.postPrivacy);
+
 router.get('/faqs', cmsController.getFAQs);
 router
     .route('/faqs/add')

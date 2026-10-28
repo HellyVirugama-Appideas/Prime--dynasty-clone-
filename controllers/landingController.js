@@ -1,4 +1,5 @@
 const Message = require('../models/messageModel.js');
+const Page = require('../models/pageModel');
 
 exports.home = (req, res) => {
     let language;
@@ -24,15 +25,23 @@ exports.en = (req, res) => {
     res.redirect('/');
 };
 
-exports.privacy = (req, res) => {
-    if (req.cookies.language == 'en') res.render('landing/privacy_eng');
-    else res.render('landing/privacy');
+// Admin panel (CMS) ka content landing page par dikhane ke liye
+// language: cookie 'en' => English, warna French (landing ka default French hai)
+const renderCmsPage = (title, viewEn, viewFr) => async (req, res) => {
+    try {
+        const isEn = req.cookies.language == 'en';
+        const page = await Page.findOne({ title }).lean();
+        const content = (isEn ? page?.en?.content : page?.fr?.content) || '';
+
+        res.render(isEn ? viewEn : viewFr, { content });
+    } catch (error) {
+        console.log(error);
+        res.render(req.cookies.language == 'en' ? viewEn : viewFr, { content: '' });
+    }
 };
 
-exports.terms = (req, res) => {
-    if (req.cookies.language == 'en') res.render('landing/terms_eng');
-    else res.render('landing/terms');
-};
+exports.privacy = renderCmsPage('privacy', 'landing/privacy_eng', 'landing/privacy');
+exports.terms = renderCmsPage('terms', 'landing/terms_eng', 'landing/terms');
 
 exports.contact = async (req, res) => {
     try {

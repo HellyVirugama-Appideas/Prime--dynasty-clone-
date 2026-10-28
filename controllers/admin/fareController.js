@@ -118,3 +118,54 @@ exports.postFareSettings = async (req, res) => {
         res.redirect('/admin/fare-settings');
     }
 };
+const toNumber = (value, min = 0, max = Infinity) => {
+    const n = Number(value);
+    if (isNaN(n)) return min;
+    return Math.min(max, Math.max(min, Number(n.toFixed(2))));
+};
+
+// GET /admin/fare-settings/rent
+exports.getRentFare = async (req, res) => {
+    try {
+        const config = await getActiveFareConfig(FareConfig);
+
+        res.render('rent_fare', {
+            rent: {
+                deliveryFee: config.rent?.deliveryFee ?? 0,
+                serviceFee: config.rent?.serviceFee ?? 0,
+                taxPercentage: config.rent?.taxPercentage ?? 0,
+            },
+            updatedAt: config.updatedAt,
+            active: 'fare-settings',
+            title: 'Rent',
+            url: req.originalUrl,
+        });
+    } catch (error) {
+        req.flash('error', error.message);
+        res.redirect('/admin/fare-settings');
+    }
+};
+
+// POST /admin/fare-settings/rent
+exports.postRentFare = async (req, res) => {
+    try {
+        const config = await getActiveFareConfig(FareConfig);
+
+        config.rent = {
+            deliveryFee: toNumber(req.body.deliveryFee),
+            serviceFee: toNumber(req.body.serviceFee),
+            taxPercentage: toNumber(req.body.taxPercentage, 0, 100),
+        };
+
+        if (req.session?.admin?._id) config.updatedBy = req.session.admin._id;
+
+        config.markModified('rent');
+        await config.save();
+
+        req.flash('success', 'Rent fare settings updated successfully');
+        res.redirect('/admin/fare-settings/rent');
+    } catch (error) {
+        req.flash('error', error.message);
+        res.redirect('/admin/fare-settings/rent');
+    }
+};

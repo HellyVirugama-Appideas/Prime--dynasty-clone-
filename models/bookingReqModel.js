@@ -87,7 +87,8 @@ const bookingReqSchema = new mongoose.Schema(
         amount: {
             type: Number,
             default: 0
-        }
+        },
+        fareBreakup: { type: mongoose.Schema.Types.Mixed, default: null },
     },
     {
         timestamps: true, // Adds createdAt and updatedAt

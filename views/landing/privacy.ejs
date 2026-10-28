@@ -53,8 +53,8 @@
                             <span class="icon-bar"></span>
                         </button>
                         <a class="navbar-brand" data-scroll="" href="/">
-                            <embed src="/frontend/images/logo.svg" height="50px" class="color_logo">
-                            <embed src="/frontend/images/white_logo.svg" height="50px" class="white_logo">
+                            <img src="/frontend/images/logo.svg" alt="Dynasty" height="50" class="color_logo">
+                            <img src="/frontend/images/white_logo.svg" alt="Dynasty" height="50" class="white_logo">
                         </a>
                     </div>
                     <!-- Collect the nav links, forms, and other content for toggling -->
@@ -110,6 +110,9 @@
                         <p>TLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.</p>
                     </div> -->
                     <div class="col-md-12 app-description-content wow fadeInUp" data-wow-duration="1.5s" data-wow-delay=".3s">
+                        <% if (typeof content !== 'undefined' && content && content.trim()) { %>
+                            <%- content %>
+                        <% } else { %>
                         <h4>Politique de confidentialité</h4>
                         <p>Dynasty accorde une grande importance à la confidentialité de ses utilisateurs et s'engage à protéger leurs informations personnelles. Notre Politique de confidentialité décrit les données que nous collectons, leur utilisation et les mesures prises pour protéger les données des utilisateurs.</p>
                         <h4>Collecte et utilisation des données</h4>
@@ -122,6 +125,7 @@
                         <p>Dynasty peut utiliser des cookies et des technologies similaires pour améliorer les performances de l'application et fournir un contenu personnalisé. Les utilisateurs ont la possibilité de gérer leurs préférences en matière de cookies dans les paramètres de l'application.</p>
                         <h4>Changements dans la politique</h4>
                         <p>Dynasty se réserve le droit de mettre à jour et de modifier sa Politique de confidentialité périodiquement. Les utilisateurs seront informés de tout changement important, et l'utilisation continue de l'application après de telles modifications constituera l'acceptation de la politique révisée.</p>
+                        <% } %>
                     </div>
                 </div>
             </div>

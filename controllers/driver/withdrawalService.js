@@ -14,33 +14,108 @@ class WithdrawalService {
     /**
      * Create Stripe Connect Express account for driver
      */
+    // async createConnectAccount(driver) {
+    //     try {
+    //         const account = await stripe.accounts.create({
+    //             type: 'express',
+    //             country: 'US', // You should set this based on driver's country
+    //             email: driver.email,
+    //             capabilities: {
+    //                 card_payments: { requested: true }, 
+    //                 transfers: { requested: true },
+    //             },
+    //             business_type: 'individual',
+    //             individual: {
+    //                 first_name: driver.name.split(' ')[0],
+    //                 last_name:
+    //                     driver.name.split(' ').slice(1).join(' ') ||
+    //                     driver.name.split(' ')[0],
+    //                 email: driver.email,
+    //                 phone: driver.phone,
+    //                 address: {
+    //                     line1: driver.address,
+    //                 },
+    //             },
+    //             metadata: {
+    //                 driverId: driver._id.toString(),
+    //             },
+    //         });
+
+    //         // Update driver with Stripe account ID
+    //         await Driver.findByIdAndUpdate(driver._id, {
+    //             stripeConnectAccountId: account.id,
+    //             stripeAccountStatus: 'pending',
+    //         });
+
+    //         return account;
+    //     } catch (error) {
+    //         console.error('Error creating Stripe Connect account:', error);
+    //         throw createError.BadRequest('Failed to create payment account');
+    //     }
+    // }
+
+    // /**
+    //  * Generate account onboarding link
+    //  */
+    // async generateOnboardingLink(driverId) {
+    //     try {
+    //         const driver = await Driver.findById(driverId);
+    //         if (!driver) {
+    //             throw createError.NotFound('Driver not found');
+    //         }
+
+    //         let accountId = driver.stripeConnectAccountId;
+
+    //         // Create account if doesn't exist
+    //         if (!accountId) {
+    //             const account = await this.createConnectAccount(driver);
+    //             accountId = account.id;
+    //         }
+
+    //         const accountLink = await stripe.accountLinks.create({
+    //             account: accountId,
+    //             refresh_url: `${process.env.FRONTEND_URL}/driver/onboarding/refresh`,
+    //             return_url: `${process.env.FRONTEND_URL}/driver/onboarding/complete`,
+    //             type: 'account_onboarding',
+    //         });
+
+    //         return accountLink;
+    //     } catch (error) {
+    //         console.error('Error generating onboarding link:', error);
+    //         throw createError.BadRequest('Failed to generate onboarding link');
+    //     }
+    // }
+
+
+        /**
+     * Create Stripe Connect Express account for driver
+     */
     async createConnectAccount(driver) {
         try {
+            const nameParts = String(driver.name || 'Driver').trim().split(/\s+/);
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(' ') || firstName;
+
+            const individual = { first_name: firstName, last_name: lastName };
+            if (driver.email) individual.email = driver.email;
+
+            // Phone sirf tab bhejo jab valid international format ho (+1555..., +9198...)
+            const phone = String(driver.phone || '').replace(/[\s()-]/g, '');
+            if (/^\+[1-9]\d{7,14}$/.test(phone)) individual.phone = phone;
+
             const account = await stripe.accounts.create({
                 type: 'express',
-                country: 'US', // You should set this based on driver's country
-                email: driver.email,
+                country: 'US', // ⚠️ driver ke asli country ke hisaab se badalna (neeche note dekho)
+                email: driver.email || undefined,
+                business_type: 'individual',
                 capabilities: {
+                    card_payments: { requested: true },
                     transfers: { requested: true },
                 },
-                business_type: 'individual',
-                individual: {
-                    first_name: driver.name.split(' ')[0],
-                    last_name:
-                        driver.name.split(' ').slice(1).join(' ') ||
-                        driver.name.split(' ')[0],
-                    email: driver.email,
-                    phone: driver.phone,
-                    address: {
-                        line1: driver.address,
-                    },
-                },
-                metadata: {
-                    driverId: driver._id.toString(),
-                },
+                individual,
+                metadata: { driverId: driver._id.toString() },
             });
 
-            // Update driver with Stripe account ID
             await Driver.findByIdAndUpdate(driver._id, {
                 stripeConnectAccountId: account.id,
                 stripeAccountStatus: 'pending',
@@ -49,7 +124,10 @@ class WithdrawalService {
             return account;
         } catch (error) {
             console.error('Error creating Stripe Connect account:', error);
-            throw createError.BadRequest('Failed to create payment account');
+            // ✅ Asli Stripe error user/Postman ko dikhao
+            throw createError.BadRequest(
+                `Failed to create payment account: ${error.raw?.message || error.message}`
+            );
         }
     }
 
@@ -63,25 +141,48 @@ class WithdrawalService {
                 throw createError.NotFound('Driver not found');
             }
 
+            // Return/refresh URL valid hona zaroori he (http:// ya https://)
+            const baseUrl = String(
+                process.env.STRIPE_ONBOARDING_BASE_URL || process.env.FRONTEND_URL || ''
+            ).replace(/\/$/, '');
+            if (!/^https?:\/\//.test(baseUrl)) {
+                throw createError.BadRequest(
+                    'FRONTEND_URL (ya STRIPE_ONBOARDING_BASE_URL) .env me set nahi he. Jaise: https://yourdomain.com'
+                );
+            }
+
+            const buildLink = accountId =>
+                stripe.accountLinks.create({
+                    account: accountId,
+                    refresh_url: `${baseUrl}/driver/onboarding/refresh`,
+                    return_url: `${baseUrl}/driver/onboarding/complete`,
+                    type: 'account_onboarding',
+                });
+
             let accountId = driver.stripeConnectAccountId;
 
-            // Create account if doesn't exist
+            // Account nahi he to naya banao
             if (!accountId) {
                 const account = await this.createConnectAccount(driver);
                 accountId = account.id;
             }
 
-            const accountLink = await stripe.accountLinks.create({
-                account: accountId,
-                refresh_url: `${process.env.FRONTEND_URL}/driver/onboarding/refresh`,
-                return_url: `${process.env.FRONTEND_URL}/driver/onboarding/complete`,
-                type: 'account_onboarding',
-            });
-
-            return accountLink;
+            try {
+                return await buildLink(accountId);
+            } catch (linkError) {
+                // Purana saved account Stripe me nahi mila (alag key/delete hua) to naya banao
+                if (/no such account/i.test(linkError.raw?.message || linkError.message)) {
+                    const account = await this.createConnectAccount(driver);
+                    return await buildLink(account.id);
+                }
+                throw linkError;
+            }
         } catch (error) {
             console.error('Error generating onboarding link:', error);
-            throw createError.BadRequest('Failed to generate onboarding link');
+            if (error.status) throw error; // createError wali errors jaise ki hain
+            throw createError.BadRequest(
+                `Failed to generate onboarding link: ${error.raw?.message || error.message}`
+            );
         }
     }
 

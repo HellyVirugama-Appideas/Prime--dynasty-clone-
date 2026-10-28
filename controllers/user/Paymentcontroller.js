@@ -11,7 +11,11 @@ const { sendNotification } = require('../../utils/sendNotification.js');
 const Driver = require('../../models/driverModel');
 const Charges = require('../../models/chargesModel');
 const { applyOfferDiscount, recordOfferRedemption } = require('../../utils/applyOfferDiscount');
-
+const FareConfig = require('../../models/fareConfigModel');
+const { getActiveFareConfig } = require('../../utils/fareEngine');
+const { buildFareBreakup } = require('./rentController');
+const mongoose = require('mongoose');
+const Car = require('../../models/carModel');
 
 // exports.getWalletBalance = async (req, res, next) => {
 //     try {
@@ -1009,125 +1013,14 @@ exports.payRideWithWallet = async (req, res, next) => {
     }
 };
 
-/**
- * Process payment for booking using wallet
- */
 // exports.payBookingWithWallet = async (req, res, next) => {
 //     try {
-//         const { bookingId, amount } = req.body;
+//         const { bookingId, amount, couponCode } = req.body;
 
 //         if (!bookingId || !amount || amount <= 0) {
 //             return next(createError.BadRequest('Invalid booking ID or amount'));
 //         }
 
-//         const amountInCents = Math.round(amount * 100);
-
-//         // Check if booking exists
-//         const booking = await Booking.findById(bookingId);
-//         if (!booking) {
-//             return next(createError.NotFound('Booking not found'));
-//         }
-
-//         // Verify user owns this booking
-//         if (booking.user.toString() !== req.user.id.toString()) {
-//             return next(createError.Forbidden('Unauthorized'));
-//         }
-
-//         // Calculate current wallet balance
-//         const walletTransactions = await Wallet.find({
-//             userId: req.user.id,
-//             status: 'completed',
-//         });
-
-//         let balance = 0;
-//         walletTransactions.forEach(transaction => {
-//             if (transaction.type === 'add') {
-//                 balance += transaction.amount;
-//             } else if (transaction.type === 'use') {
-//                 balance -= transaction.amount;
-//             }
-//         });
-
-//         // Check if sufficient balance
-//         if (balance < amountInCents) {
-//             return res.json({
-//                 code: '0',
-//                 message: req.t('wallet.insufficient.balance'),
-//                 balance: balance / 100,
-//                 required: amount,
-//             });
-//         }
-
-//         // Create wallet deduction transaction for user
-//         const walletTransaction = await Wallet.create({
-//             userId: req.user.id,
-//             type: 'use',
-//             amount: amountInCents,
-//             status: 'completed',
-//             bookingId: bookingId,
-//             description: 'Booking payment',
-//         });
-
-//         // Credit driver wallet with the same amount
-//         if (booking.driver) {
-//             await Wallet.create({
-//                 driverId: booking.driver,
-//                 type: 'add',
-//                 amount: amountInCents,
-//                 status: 'completed',
-//                 bookingId: bookingId,
-//                 description: 'Earnings from booking',
-//             });
-//         }
-
-//         // Create transaction record
-//         const transaction = await Transaction.create({
-//             userId: req.user.id,
-//             amount: amountInCents,
-//             paymentMethod: 'wallet',
-//             type: 'rent car',
-//             status: 'completed',
-//             rideId: bookingId, // Using rideId field for bookingId
-//         });
-
-//         // Update booking payment status
-//         await Booking.findByIdAndUpdate(bookingId, {
-//             paymentStatus: 'completed',
-//             paymentMethod: 'wallet',
-//         });
-
-//         const newBalance = balance - amountInCents;
-
-//         res.json({
-//             code: '1',
-//             message: req.t('payment.successful'),
-//             balance: newBalance / 100,
-//             transaction: {
-//                 id: transaction._id,
-//                 amount: amount,
-//                 bookingId: bookingId,
-//                 createdAt: transaction.createdAt,
-//             },
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
-
-/**
- * Process payment for booking using wallet (FINAL FIXED + DETAILED LOGGING)
- */
-// exports.payBookingWithWallet = async (req, res, next) => {
-//     try {
-//         const { bookingId, amount } = req.body;
-
-//         if (!bookingId || !amount || amount <= 0) {
-//             return next(createError.BadRequest('Invalid booking ID or amount'));
-//         }
-
-//         const amountInCents = Math.round(amount * 100);
-
-//         // ✅ Find Booking (NOT BookingReq)
 //         const booking = await Booking.findById(bookingId)
 //             .populate('driver', 'fcmToken name')
 //             .populate('car', 'name');
@@ -1136,15 +1029,37 @@ exports.payRideWithWallet = async (req, res, next) => {
 //             return next(createError.NotFound('Booking not found'));
 //         }
 
-//         // ✅ Ownership check
 //         if (booking.user.toString() !== req.user.id.toString()) {
 //             return next(createError.Forbidden('Unauthorized'));
 //         }
 
-//         // ✅ Already paid check
 //         if (booking.paymentStatus === 'completed') {
 //             return next(createError.BadRequest('Booking already paid'));
 //         }
+
+//         // ✅ Apply coupon (optional)
+//         let discount = 0;
+//         let couponApplied = null;
+//         let offerId = null;
+
+//         if (couponCode) {
+//             try {
+//                 const result = await applyOfferDiscount({
+//                     couponCode,
+//                     amount,
+//                     type: 'rent',
+//                     userId: req.user.id,
+//                 });
+//                 discount = result.discount;
+//                 couponApplied = result.couponApplied;
+//                 offerId = result.offerId;
+//             } catch (couponError) {
+//                 return next(createError.BadRequest(couponError.message));
+//             }
+//         }
+
+//         const finalAmount = Number((amount - discount).toFixed(2));
+//         const amountInCents = Math.round(finalAmount * 100);
 
 //         // ================= WALLET BALANCE =================
 //         const walletTransactions = await Wallet.find({
@@ -1163,7 +1078,7 @@ exports.payRideWithWallet = async (req, res, next) => {
 //                 code: '0',
 //                 message: 'Insufficient wallet balance',
 //                 balance: balance / 100,
-//                 required: amount,
+//                 required: finalAmount,
 //             });
 //         }
 
@@ -1178,7 +1093,7 @@ exports.payRideWithWallet = async (req, res, next) => {
 //             amount: amountInCents,
 //             status: 'completed',
 //             bookingId: bookingId,
-//             description: 'Car rental payment',
+//             description: couponApplied ? `Car rental payment (coupon: ${couponApplied})` : 'Car rental payment',
 //             grossAmount: amountInCents,
 //             adminCommission,
 //             commissionRate,
@@ -1213,7 +1128,20 @@ exports.payRideWithWallet = async (req, res, next) => {
 //             driverAmount,
 //             commissionRate,
 //             commissionType,
+//             couponCode: couponApplied || undefined,
+//             discountAmount: Math.round(discount * 100),
 //         });
+
+//         // ✅ Record offer redemption
+//         if (offerId) {
+//             await recordOfferRedemption({
+//                 userId: req.user.id,
+//                 offerId,
+//                 referenceType: 'rent',
+//                 referenceId: bookingId,
+//                 discountAmount: discount,
+//             });
+//         }
 
 //         // ================= UPDATE BOOKING =================
 //         await Booking.findByIdAndUpdate(bookingId, {
@@ -1234,7 +1162,7 @@ exports.payRideWithWallet = async (req, res, next) => {
 //             sendNotification(booking.driver.fcmToken, {
 //                 driver: booking.driver._id,
 //                 title: 'Payment Received',
-//                 body: `${req.user.name} paid ₹${amount} for booking.`,
+//                 body: `${req.user.name} paid ${finalAmount} for booking.`,
 //             });
 //         }
 
@@ -1246,7 +1174,10 @@ exports.payRideWithWallet = async (req, res, next) => {
 //             balance: newBalance / 100,
 //             transaction: {
 //                 id: transaction._id,
-//                 amount,
+//                 originalAmount: amount,
+//                 discount,
+//                 amount: finalAmount,
+//                 couponApplied,
 //                 bookingId,
 //                 createdAt: transaction.createdAt,
 //             },
@@ -1260,19 +1191,43 @@ exports.payRideWithWallet = async (req, res, next) => {
 
 exports.payBookingWithWallet = async (req, res, next) => {
     try {
-        const { bookingId, amount, couponCode } = req.body;
+        // ✅ App kabhi bookingId kisi aur naam se bhejti he to bhi chalega
+        const rawId =
+            req.body.bookingId ||
+            req.body.booking_id ||
+            req.body.requestId ||
+            req.body.id;
+        const bookingId = String(rawId || '').trim();
+        const { couponCode } = req.body;
 
-        if (!bookingId || !amount || amount <= 0) {
-            return next(createError.BadRequest('Invalid booking ID or amount'));
+        console.log('[PAY-WALLET] body:', req.body, '| user:', String(req.user.id));
+
+        if (!bookingId) {
+            return next(createError.BadRequest('bookingId is required'));
         }
 
-        const booking = await Booking.findById(bookingId)
-            .populate('driver', 'fcmToken name')
-            .populate('car', 'name');
+        // ✅ Booking ya BookingReq, dono ki id chalegi
+        let booking = null;
+        try {
+            booking = await Booking.findById(bookingId)
+                .populate('driver', 'fcmToken name')
+                .populate('car', 'name price');
+
+            if (!booking) {
+                booking = await Booking.findOne({ bookingReq: bookingId })
+                    .populate('driver', 'fcmToken name')
+                    .populate('car', 'name price');
+            }
+        } catch (castError) {
+            return next(createError.BadRequest('Invalid booking ID format'));
+        }
 
         if (!booking) {
             return next(createError.NotFound('Booking not found'));
         }
+
+        // Asli Booking id (response aur wallet records me yehi use hogi)
+        const realBookingId = booking._id;
 
         if (booking.user.toString() !== req.user.id.toString()) {
             return next(createError.Forbidden('Unauthorized'));
@@ -1280,6 +1235,34 @@ exports.payBookingWithWallet = async (req, res, next) => {
 
         if (booking.paymentStatus === 'completed') {
             return next(createError.BadRequest('Booking already paid'));
+        }
+
+        // ✅ Amount server se: car price x days + admin ke Rent Fare Settings
+        let amount = 0;
+        let fareBreakup = null;
+
+        if (booking.car) {
+            const fareConfig = await getActiveFareConfig(FareConfig);
+            fareBreakup = buildFareBreakup({
+                car: booking.car,
+                fareConfig,
+                bookedFrom: booking.bookedFrom,
+                bookedTo: booking.bookedTo,
+                deliveryOption: booking.deliveryOption,
+            });
+            amount = fareBreakup.estimatedTotal;
+        } else {
+            amount = Number(booking.price) || 0;
+        }
+
+        if (!amount || amount <= 0) {
+            return next(createError.BadRequest('Booking amount is invalid'));
+        }
+
+        if (req.body.amount && Number(req.body.amount) !== amount) {
+            console.log(
+                `[PAY-WALLET] client amount ${req.body.amount} != server amount ${amount} (server amount use hua)`
+            );
         }
 
         // ✅ Apply coupon (optional)
@@ -1337,8 +1320,10 @@ exports.payBookingWithWallet = async (req, res, next) => {
             type: 'use',
             amount: amountInCents,
             status: 'completed',
-            bookingId: bookingId,
-            description: couponApplied ? `Car rental payment (coupon: ${couponApplied})` : 'Car rental payment',
+            bookingId: realBookingId,
+            description: couponApplied
+                ? `Car rental payment (coupon: ${couponApplied})`
+                : 'Car rental payment',
             grossAmount: amountInCents,
             adminCommission,
             commissionRate,
@@ -1352,7 +1337,7 @@ exports.payBookingWithWallet = async (req, res, next) => {
                 type: 'add',
                 amount: driverAmount,
                 status: 'completed',
-                bookingId: bookingId,
+                bookingId: realBookingId,
                 description: 'Earnings from booking',
                 grossAmount: amountInCents,
                 adminCommission,
@@ -1368,7 +1353,7 @@ exports.payBookingWithWallet = async (req, res, next) => {
             paymentMethod: 'wallet',
             type: 'rent car',
             status: 'completed',
-            bookingId: bookingId,
+            bookingId: realBookingId,
             adminCommission,
             driverAmount,
             commissionRate,
@@ -1383,17 +1368,37 @@ exports.payBookingWithWallet = async (req, res, next) => {
                 userId: req.user.id,
                 offerId,
                 referenceType: 'rent',
-                referenceId: bookingId,
+                referenceId: realBookingId,
                 discountAmount: discount,
             });
         }
 
-        // ================= UPDATE BOOKING =================
-        await Booking.findByIdAndUpdate(bookingId, {
+        // ================= UPDATE BOOKING (fare freeze ke saath) =================
+        const paidAt = new Date();
+        const bookingUpdate = {
             paymentStatus: 'completed',
             paymentMethod: 'wallet',
-            paidAt: new Date(),
-        });
+            paidAt,
+            price: amount,
+        };
+        if (fareBreakup) bookingUpdate.fareBreakup = fareBreakup;
+
+        await Booking.findByIdAndUpdate(realBookingId, bookingUpdate);
+
+        // BookingReq me bhi payment status sync karo (cancel/refund logic isi se chalta he)
+        if (booking.bookingReq) {
+            const reqUpdate = {
+                paymentStatus: 'completed',
+                paymentMethod: 'wallet',
+                paidAt,
+                amount,
+            };
+            if (fareBreakup) reqUpdate.fareBreakup = fareBreakup;
+
+            await BookingReq.findByIdAndUpdate(booking.bookingReq, reqUpdate).catch(err =>
+                console.log('[PAY-WALLET] BookingReq update error:', err.message)
+            );
+        }
 
         // ================= NOTIFICATIONS =================
         if (req.user?.fcmToken) {
@@ -1423,7 +1428,7 @@ exports.payBookingWithWallet = async (req, res, next) => {
                 discount,
                 amount: finalAmount,
                 couponApplied,
-                bookingId,
+                bookingId: realBookingId,
                 createdAt: transaction.createdAt,
             },
         });
@@ -1536,31 +1541,96 @@ exports.payBookingWithWallet = async (req, res, next) => {
 
 exports.createDirectPayment = async (req, res, next) => {
     try {
-        const { amount, type, referenceId, couponCode } = req.body;
+        const { type, couponCode } = req.body;
+        // App referenceId ki jagah kabhi bookingId bhi bhej deti he
+        const referenceId = String(
+            req.body.referenceId || req.body.bookingId || req.body.booking_id || ''
+        ).trim();
 
-        if (!amount || amount <= 0 || !type || !referenceId) {
-            return next(createError.BadRequest('Invalid payment details'));
+        console.log('[DIRECT-PAY] body:', req.body, '| user:', String(req.user.id));
+
+        if (!type || !referenceId) {
+            return next(createError.BadRequest('type and referenceId are required'));
         }
 
-        // Verify the ride/booking exists and belongs to user
+        let amount = Number(req.body.amount) || 0;
         let reference;
+        let realReferenceId = referenceId; // Stripe metadata aur transaction me yehi jayegi
+
         if (type === 'ride') {
+            if (amount <= 0) {
+                return next(createError.BadRequest('Invalid payment details'));
+            }
+
             reference = await Ride.findOne({ _id: referenceId });
         } else if (type === 'booking') {
-            reference = await Booking.findOne({
-                _id: referenceId,
-                user: req.user.id,
-            }).populate('driver', 'fcmToken name')
-                .populate('car', 'name');
+            // ✅ Booking ya BookingReq, dono ki id chalegi
+            try {
+                reference = await Booking.findOne({ _id: referenceId, user: req.user.id })
+                    .populate('driver', 'fcmToken name')
+                    .populate('car', 'name price');
+
+                if (!reference) {
+                    reference = await Booking.findOne({
+                        bookingReq: referenceId,
+                        user: req.user.id,
+                    })
+                        .populate('driver', 'fcmToken name')
+                        .populate('car', 'name price');
+                }
+            } catch (castError) {
+                return next(createError.BadRequest('Invalid booking ID format'));
+            }
 
             if (!reference) {
+                // Alag message: BookingReq mil jaye lekin Booking na bana ho
+                const pendingReq = await BookingReq.findOne({
+                    _id: referenceId,
+                    user: req.user.id,
+                }).select('status');
+
+                if (pendingReq) {
+                    return next(
+                        createError.BadRequest(
+                            `Booking is not ready for payment yet (request status: ${pendingReq.status}). Driver must accept first.`
+                        )
+                    );
+                }
                 return next(createError.BadRequest('Invalid Booking ID. Please use valid booking.'));
             }
+
             if (reference.status !== 'accepted' && reference.status !== 'confirmed') {
                 return next(createError.BadRequest('Booking must be accepted first'));
             }
             if (reference.paymentStatus === 'completed') {
                 return next(createError.BadRequest('Booking already paid'));
+            }
+
+            realReferenceId = String(reference._id);
+
+            // ✅ Amount server se: driver ka car price x days + admin Rent Fare Settings
+            if (reference.car) {
+                const fareConfig = await getActiveFareConfig(FareConfig);
+                const fareBreakup = buildFareBreakup({
+                    car: reference.car,
+                    fareConfig,
+                    bookedFrom: reference.bookedFrom,
+                    bookedTo: reference.bookedTo,
+                    deliveryOption: reference.deliveryOption,
+                });
+                amount = fareBreakup.estimatedTotal;
+            } else {
+                amount = Number(reference.price) || 0;
+            }
+
+            if (!amount || amount <= 0) {
+                return next(createError.BadRequest('Booking amount is invalid'));
+            }
+
+            if (req.body.amount && Number(req.body.amount) !== amount) {
+                console.log(
+                    `[DIRECT-PAY] client amount ${req.body.amount} != server amount ${amount} (server amount use hua)`
+                );
             }
         } else {
             return next(createError.BadRequest('Invalid payment type'));
@@ -1616,7 +1686,7 @@ exports.createDirectPayment = async (req, res, next) => {
             metadata: {
                 userId: req.user.id.toString(),
                 type: type === 'ride' ? 'ride_payment' : 'rent car',
-                referenceId: referenceId,
+                referenceId: realReferenceId, // ✅ asli Booking id, webhook isi se booking dhundta he
                 couponCode: couponApplied || '',
                 offerId: offerId ? offerId.toString() : '',
                 discount: discount.toString(),
@@ -1634,8 +1704,8 @@ exports.createDirectPayment = async (req, res, next) => {
             paymentMethod: 'card',
             type: type === 'ride' ? 'ride_payment' : 'rent car',
             status: 'pending',
-            rideId: referenceId,
-            bookingId: referenceId,
+            rideId: realReferenceId,
+            bookingId: realReferenceId,
             stripePaymentId: paymentIntent.id,
             couponCode: couponApplied || undefined,
             discountAmount: Math.round(discount * 100),
@@ -1653,6 +1723,7 @@ exports.createDirectPayment = async (req, res, next) => {
             couponApplied,
         });
     } catch (error) {
+        console.error('❌ createDirectPayment Error:', error);
         next(error);
     }
 };
@@ -1910,53 +1981,297 @@ exports.confirmDirectPayment = async (req, res, next) => {
 /**
  * Get transaction history
  */
+// exports.getTransactionHistory = async (req, res, next) => {
+//     try {
+//         const { page = 1, limit = 20, type } = req.query;
+//         const skip = (page - 1) * limit;
+
+//         const query = { userId: req.user.id };
+//         if (type) query.type = type;
+
+//         const transactions = await Transaction.find(query)
+//             .sort({ createdAt: -1 })
+//             .skip(skip)
+//             .limit(parseInt(limit))
+//             .populate('rideId', '-__v -otp -user -paymentMethod -isSchedule') // populate ride/booking details
+//             .select('-__v');
+
+//         const total = await Transaction.countDocuments(query);
+
+//         transactions.forEach(tx => {
+//             if (tx.driverAmount !== undefined) {
+//                 tx.driverAmount = (tx.driverAmount / 100).toFixed(2);
+//             }
+
+//             // Admin Commission
+//             if (tx.adminCommission !== undefined) {
+//                 tx.adminCommission = (tx.adminCommission / 100).toFixed(2);
+//             }
+
+//             if (tx.amount !== undefined) {
+//                 tx.amount = (tx.amount / 100).toFixed(2);
+//             }
+//         });
+
+//         res.json({
+//             code: '1',
+//             message: req.t('success'),
+//             transactions,
+//             pagination: {
+//                 currentPage: parseInt(page),
+//                 totalPages: Math.ceil(total / limit),
+//                 totalTransactions: total,
+//                 hasMore: skip + transactions.length < total,
+//             },
+//         });
+//     } catch (error) {
+//         next(error);
+//     }
+// };
+
+// ================= HELPERS =================
+const txNorm = value => String(value || '').toLowerCase().replace(/[\s_-]+/g, '');
+
+const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const txLabel = value =>
+    String(value || '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+
+// User ne paisa DIYA (debit). Inke alawa baaki sab (wallet top-up, refund wagairah) credit.
+// ⚠️ Apne Transaction.type enum ke hisaab se adjust karo
+const DEBIT_TYPES = ['ride_payment', 'rent car', 'bike', 'rent_car', 'booking_payment'];
+
+// "rent car", "Rent_Car", "rent-car" sab ek hi type maane jayenge
+const resolveTypes = (raw, validTypes) => {
+    const wanted = String(raw)
+        .split(',')
+        .map(v => txNorm(v))
+        .filter(Boolean);
+
+    return validTypes.filter(v => wanted.includes(txNorm(v)));
+};
+
+const isDebitTx = tx => DEBIT_TYPES.includes(tx.type) && tx.status !== 'refunded';
+
+/**
+ * Get user's transaction history with filters
+ * GET api/user/transactions-user?page=1&limit=20&filter=all&type=rent car&search=...
+ */
 exports.getTransactionHistory = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20, type } = req.query;
-        const skip = (page - 1) * limit;
+        const {
+            page = 1,
+            limit = 20,
+            status,
+            paymentMethod,
+            dateFrom,
+            dateTo,
+            minAmount,
+            maxAmount,
+        } = req.query;
+
+        const rawType = String(req.query.type || '').trim();
+        const search = String(req.query.search || '').trim();
+        // filter (reference jaisa) ya direction (purana naam), dono chalenge
+        const flowFilter = String(req.query.filter || req.query.direction || 'all')
+            .toLowerCase()
+            .trim();
+        const sortOrder = String(req.query.sort || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+
+        if (!['all', 'credit', 'debit'].includes(flowFilter)) {
+            return next(createError.BadRequest('filter must be one of: all, credit, debit'));
+        }
+
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+        const skip = (pageNum - 1) * limitNum;
+
+        const toIn = value =>
+            String(value)
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean);
 
         const query = { userId: req.user.id };
-        if (type) query.type = type;
+        const andConds = [];
 
-        const transactions = await Transaction.find(query)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(parseInt(limit))
-            .populate('rideId', '-__v -otp -user -paymentMethod -isSchedule') // populate ride/booking details
-            .select('-__v');
+        // Transaction.type ke valid values (dynamic, schema enum se)
+        const sourceTypes = Transaction.schema.path('type')?.enumValues || [];
 
-        const total = await Transaction.countDocuments(query);
+        // ================= TYPE FILTER =================
+        if (rawType && txNorm(rawType) !== 'all') {
+            let matched;
 
-        transactions.forEach(tx => {
-            if (tx.driverAmount !== undefined) {
-                tx.driverAmount = (tx.driverAmount / 100).toFixed(2);
+            if (sourceTypes.length) {
+                matched = resolveTypes(rawType, sourceTypes);
+                if (!matched.length) {
+                    return next(
+                        createError.BadRequest(`type must be one of: all, ${sourceTypes.join(', ')}`)
+                    );
+                }
+            } else {
+                matched = toIn(rawType); // schema me enum nahi he to jo aaya wahi
             }
 
-            // Admin Commission
-            if (tx.adminCommission !== undefined) {
-                tx.adminCommission = (tx.adminCommission / 100).toFixed(2);
+            query.type = { $in: matched };
+        }
+
+        // ================= ALL / CREDIT / DEBIT =================
+        if (flowFilter === 'debit') {
+            andConds.push({ type: { $in: DEBIT_TYPES }, status: { $ne: 'refunded' } });
+        } else if (flowFilter === 'credit') {
+            andConds.push({
+                $or: [{ type: { $nin: DEBIT_TYPES } }, { status: 'refunded' }],
+            });
+        }
+
+        // ================= OTHER FILTERS =================
+        if (status) query.status = { $in: toIn(status) };
+        if (paymentMethod) query.paymentMethod = { $in: toIn(paymentMethod) };
+
+        if (dateFrom || dateTo) {
+            query.createdAt = {};
+
+            if (dateFrom) {
+                const from = new Date(dateFrom);
+                if (isNaN(from.getTime())) return next(createError.BadRequest('Invalid dateFrom'));
+                query.createdAt.$gte = from;
             }
 
-            if (tx.amount !== undefined) {
-                tx.amount = (tx.amount / 100).toFixed(2);
+            if (dateTo) {
+                const to = new Date(dateTo);
+                if (isNaN(to.getTime())) return next(createError.BadRequest('Invalid dateTo'));
+                to.setHours(23, 59, 59, 999); // dateTo poore din tak inclusive
+                query.createdAt.$lte = to;
             }
+        }
+
+        // Amount range (user dollars me bhejta he, DB me cents me he)
+        if (minAmount || maxAmount) {
+            query.amount = {};
+
+            if (minAmount) {
+                const min = Number(minAmount);
+                if (isNaN(min)) return next(createError.BadRequest('Invalid minAmount'));
+                query.amount.$gte = Math.round(min * 100);
+            }
+
+            if (maxAmount) {
+                const max = Number(maxAmount);
+                if (isNaN(max)) return next(createError.BadRequest('Invalid maxAmount'));
+                query.amount.$lte = Math.round(max * 100);
+            }
+        }
+
+        // ================= SEARCH =================
+        // type/status/method/coupon/stripe id, ride ka pickup-drop address,
+        // booking ki car ka naam, amount aur id
+        if (search) {
+            const rx = new RegExp(escapeRegex(search), 'i');
+
+            const [matchedRides, matchedCars] = await Promise.all([
+                Ride.find({
+                    user: req.user.id,
+                    $or: [{ pickupAddress: rx }, { endAddress: rx }],
+                }).select('_id'),
+                Car.find({ $or: [{ name: rx }, { model: rx }] }).select('_id'),
+            ]);
+
+            const matchedBookings = matchedCars.length
+                ? await Booking.find({
+                      user: req.user.id,
+                      car: { $in: matchedCars.map(c => c._id) },
+                  }).select('_id')
+                : [];
+
+            const or = [
+                { type: rx },
+                { status: rx },
+                { paymentMethod: rx },
+                { couponCode: rx },
+                { stripePaymentId: rx },
+                { rideId: { $in: matchedRides.map(r => r._id) } },
+                { bookingId: { $in: matchedBookings.map(b => b._id) } },
+            ];
+
+            const num = parseFloat(search);
+            if (Number.isFinite(num)) {
+                or.push({ amount: Math.round(num * 100) });
+            }
+
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                or.push({ _id: search }, { bookingId: search }, { rideId: search });
+            }
+
+            andConds.push({ $or: or });
+        }
+
+        if (andConds.length) query.$and = andConds;
+
+        // ================= FETCH =================
+        const [transactions, total] = await Promise.all([
+            Transaction.find(query)
+                .sort({ createdAt: sortOrder })
+                .skip(skip)
+                .limit(limitNum)
+                .populate({ path: 'rideId', model: Ride, select: 'pickupAddress endAddress price' })
+                .populate({
+                    path: 'bookingId',
+                    model: Booking,
+                    select: 'address price bookedFrom bookedTo',
+                })
+                .select('-__v')
+                .lean(),
+            Transaction.countDocuments(query),
+        ]);
+
+        const formattedTransactions = transactions.map(t => {
+            const isDebit = isDebitTx(t);
+
+            return {
+                ...t,
+                txType: t.type, // asli Transaction type (rent car / ride_payment / ...)
+                flow: isDebit ? 'debit' : 'credit',
+
+                // ✅ App ke liye display type: credit -> "Received", debit -> "Paid"
+                type: isDebit ? 'Paid' : 'Received',
+
+                formattedAmount: t.amount !== undefined ? t.amount / 100 : null,
+                formattedDriverAmount: t.driverAmount ? t.driverAmount / 100 : null,
+                formattedAdminCommission: t.adminCommission ? t.adminCommission / 100 : null,
+                formattedDiscount: t.discountAmount ? t.discountAmount / 100 : null,
+            };
         });
+
+        // App ke type chips ke liye (dynamic): [{ key, label }]
+        const availableTypes = [
+            { key: 'all', label: 'All' },
+            ...sourceTypes.map(v => ({ key: v, label: txLabel(v) })),
+        ];
 
         res.json({
             code: '1',
             message: req.t('success'),
-            transactions,
+            filter: flowFilter,
+            availableTypes,
+            transactions: formattedTransactions,
             pagination: {
-                currentPage: parseInt(page),
-                totalPages: Math.ceil(total / limit),
+                currentPage: pageNum,
+                totalPages: Math.ceil(total / limitNum),
                 totalTransactions: total,
                 hasMore: skip + transactions.length < total,
             },
         });
     } catch (error) {
+        console.error('Get user transaction history error:', error);
         next(error);
     }
 };
+
+
+
 
 /**
  * Get transaction history – with separate ride & rent details

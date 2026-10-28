@@ -1265,7 +1265,7 @@ module.exports = (io) => {
                     } else if (requestedType === 'bike') {
                         isMatch = (driverUseFor === 'bike');
                     }
-
+                        
                     if (isMatch) {
                         // Agar location null bhi hai to bhi dikhaye (temporary)
                         const distance = driverData.lat && driverData.lng

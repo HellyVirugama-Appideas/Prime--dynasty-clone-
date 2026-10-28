@@ -15,4 +15,7 @@ router.route('/fare-settings')
 // Trip-type / fare reports (Section 9 of the spec)
 router.get('/fare-reports', reportsController.getFareReports);
 
+router.get('/fare-settings/rent', fareController.getRentFare);
+router.post('/fare-settings/rent', fareController.postRentFare);
+
 module.exports = router;

@@ -1,3 +1,9 @@
+<%
+    // ── Active state helpers (Fare Settings: Ride vs Rent) ──
+    const isFareRent = url.startsWith('/admin/fare-settings/rent');
+    const isFareRide = url.startsWith('/admin/fare-settings') && !isFareRent;
+    const isFareOpen = isFareRent || isFareRide;
+%>
 <!-- BEGIN: Header-->
 <style>
     .notification-badge {
@@ -71,6 +77,9 @@
                                         <li><a href="/admin/cms/terms"
                                                 class="<%= url == '/admin/cms/terms' ? 'active' : '' %>"><span>Terms &
                                                     Conditions</span></a></li>
+                                        <li><a href="/admin/cms/privacy"
+                                                class="<%= url == '/admin/cms/privacy' ? 'active' : '' %>"><span>Privacy
+                                                    Policy</span></a></li>
                                         <li><a href="/admin/cms/faqs"
                                                 class="<%= url.startsWith('/admin/cms/faqs') ? 'active' : '' %>"><span>FAQs</span></a>
                                         </li>
@@ -166,6 +175,7 @@
                                             Management</span>
                                     </a>
                                 </li>
+
                                 <li
                                     class="bold <%= url.startsWith('/admin/rides') || url.startsWith('/admin/bookings') ? 'active' : '' %>">
                                     <a class="dropdown-menu waves-effect waves-cyan" data-target="ridesDropdown">
@@ -207,14 +217,25 @@
                                     </a>
                                 </li>
 
-                                <li class="bold <%= url.startsWith('/admin/fare-settings') ? 'active' : '' %>">
-                                    <a class="waves-effect waves-cyan" href="/admin/fare-settings">
+                                <!-- ✅ Fare Settings: click par Ride / Rent dropdown (baaki menus jaisa) -->
+                                <li class="bold <%= isFareOpen ? 'active' : '' %>">
+                                    <a class="dropdown-menu waves-effect waves-cyan" data-target="fareDropdown">
                                         <i
-                                            class="material-icons <%= url.startsWith('/admin/fare-settings') ? 'theme-text' : 'black-text' %>">monetization_on</i>
-                                        <span
-                                            class="menu-title <%= url.startsWith('/admin/fare-settings') ? 'theme-text' : 'black-text' %>">Fare
-                                            Settings</span>
+                                            class="material-icons <%= isFareOpen ? 'theme-text' : 'black-text' %>">monetization_on</i>
+                                        <span>
+                                            <span
+                                                class="dropdown-title <%= isFareOpen ? 'theme-text' : 'black-text' %>">Fare
+                                                Settings</span>
+                                            <i class="material-icons right <%= isFareOpen ? 'theme-text' : 'black-text' %>"
+                                                style="font-size:18px !important">keyboard_arrow_down</i>
+                                        </span>
                                     </a>
+                                    <ul class="dropdown-content dropdown-horizontal-list" id="fareDropdown">
+                                        <li><a href="/admin/fare-settings"
+                                                class="<%= isFareRide ? 'active' : '' %>"><span>Ride</span></a></li>
+                                        <li><a href="/admin/fare-settings/rent"
+                                                class="<%= isFareRent ? 'active' : '' %>"><span>Rent</span></a></li>
+                                    </ul>
                                 </li>
 
                                 <li class="bold <%= url.startsWith('/admin/fare-reports') ? 'active' : '' %>">
@@ -226,6 +247,7 @@
                                             Reports</span>
                                     </a>
                                 </li>
+
                                 <li class="bold <%= url.startsWith('/admin/cancel-reasons') ? 'active' : '' %>">
                                     <a class="waves-effect waves-cyan" href="/admin/cancel-reasons">
                                         <i
@@ -254,9 +276,11 @@
                                             class="menu-title <%= url.startsWith('/admin/offers') ? 'theme-text' : 'black-text' %>">offers</span>
                                     </a>
                                 </li>
+
                                 <li class="bold <%= url.startsWith('/admin/incentives') ? 'active' : '' %>">
                                     <a class="waves-effect waves-cyan" href="/admin/incentives">
-                                        <i class="material-icons <%= url.startsWith('/admin/incentives') ? 'theme-text' : 'black-text' %>">card_giftcard</i>
+                                        <i
+                                            class="material-icons <%= url.startsWith('/admin/incentives') ? 'theme-text' : 'black-text' %>">card_giftcard</i>
                                         <span
                                             class="menu-title <%= url.startsWith('/admin/incentives') ? 'theme-text' : 'black-text' %>">Incentives
                                             & Bonus</span>
@@ -264,7 +288,6 @@
                                 </li>
                             </ul>
                         </div>
-
                     </nav>
                 </ul>
 
@@ -383,6 +406,21 @@
             </a>
         </li>
 
+        <!-- ✅ Fare Settings (mobile): click par Ride / Rent -->
+        <li class="bold <%= isFareOpen ? 'active' : '' %>">
+            <a class="collapsible-header waves-effect waves-cyan" href="javascript:void(0);">
+                <i class="material-icons <%= isFareOpen ? 'theme-text' : 'black-text' %>">monetization_on</i>
+                <span class="menu-title">Fare Settings</span>
+                <i class="material-icons right">keyboard_arrow_down</i>
+            </a>
+            <div class="collapsible-body">
+                <ul>
+                    <li><a class="<%= isFareRide ? 'active' : '' %>" href="/admin/fare-settings">Ride</a></li>
+                    <li><a class="<%= isFareRent ? 'active' : '' %>" href="/admin/fare-settings/rent">Rent</a></li>
+                </ul>
+            </div>
+        </li>
+
         <li class="bold <%= url.startsWith('/admin/reports') ? 'active' : '' %>">
             <a class="waves-effect waves-cyan" href="/admin/reports">
                 <i
@@ -411,7 +449,8 @@
                             href="/admin/cms/faq">FAQ's</a></li>
                     <li><a class="<%= url.startsWith('/admin/cms/privacy') ? 'active' : '' %>"
                             href="/admin/cms/privacy">Privacy Policy</a></li>
-                    <li><a class="<%= url.startsWith('/admin/cms/term') ? 'active' : '' %>" href="/admin/cms/term">Terms
+                    <li><a class="<%= url.startsWith('/admin/cms/terms') ? 'active' : '' %>"
+                            href="/admin/cms/terms">Terms
                             and Conditions</a></li>
                 </ul>
             </div>

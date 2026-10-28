@@ -10,6 +10,66 @@ const Rating = require('../../models/ratingModel');
 const Charges = require('../../models/chargesModel');
 const geolib = require('geolib');
 const Driver = require("../../models/driverModel")
+const FareConfig = require('../../models/fareConfigModel');
+const { calculateFare, getActiveFareConfig } = require('../../utils/fareEngine');
+
+
+
+// ✅ Car ki location se customer ki location tak distance (km)
+const getDistanceKm = (car, latitude, longitude) => {
+    if (!latitude || !longitude || car.location?.coordinates?.length !== 2) return 0;
+
+    const meters = geolib.getDistance(
+        { latitude: car.location.coordinates[1], longitude: car.location.coordinates[0] },
+        { latitude: Number(latitude), longitude: Number(longitude) }
+    );
+    return Number((meters / 1000).toFixed(2));
+};
+
+// ✅ RENT fare (ride ka logic alag he, fareEngine ride ke liye hi hai)
+// Total = (Car Price x Days) + Delivery Fee + Service Fee + Tax
+// ✅ RENT fare: Total = (Car Price x Days) + Delivery Fee + Service Fee + Tax
+// Delivery fee, service fee aur tax: sirf admin ke Rent Charges (FareConfig.rent) se
+const buildFareBreakup = ({ car, fareConfig, bookedFrom, bookedTo, deliveryOption }) => {
+    const from = new Date(bookedFrom);
+    const to = new Date(bookedTo);
+    from.setHours(0, 0, 0, 0);
+    to.setHours(0, 0, 0, 0);
+    const days = Math.max(1, Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1);
+
+    const rent = fareConfig?.rent || {};
+
+    // 1) Car rental: car ka price x days
+    const perDayRate = Number(car.price) || 0;
+    const rentalAmount = Number((perDayRate * days).toFixed(2));
+
+    // 2) Delivery fee: pickup = 0 (Free)
+    const deliveryFee =
+        deliveryOption === 'delivery' ? Number(rent.deliveryFee) || 0 : 0;
+
+    // 3) Service fee
+    const serviceFee = Number(rent.serviceFee) || 0;
+
+    // 4) Tax
+    const taxPercentage = Number(rent.taxPercentage) || 0;
+    const taxableAmount = rentalAmount + deliveryFee + serviceFee;
+    const taxes = Number(((taxableAmount * taxPercentage) / 100).toFixed(2));
+
+    return {
+        version: 2,
+        days,
+        deliveryOption,
+        perDayRate,
+        rentalAmount,
+        deliveryFee,
+        serviceFee,
+        taxPercentage,
+        taxes,
+        estimatedTotal: Number((taxableAmount + taxes).toFixed(2)),
+    };
+};
+
+const money = n => `$${Number(n || 0).toFixed(2)}`;
 
 exports.listCars = async (req, res, next) => {
     try {
@@ -230,15 +290,152 @@ exports.carDetail = async (req, res, next) => {
         next(error);
     }
 };
-exports.bookCar = async (req, res, next) => {
-    console.log('\n\n');
-    console.log('============================================================');
-    console.log('🚀 bookCar API CALLED SUCCESSFULLY !');
-    console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    console.log('User ID:', req.user?.id || 'No user');
-    console.log('Car ID from body:', req.body.carId);
-    console.log('============================================================\n\n');
+// exports.bookCar = async (req, res, next) => {
+//     console.log('\n\n');
+//     console.log('============================================================');
+//     console.log('🚀 bookCar API CALLED SUCCESSFULLY !');
+//     console.log('Request Body:', JSON.stringify(req.body, null, 2));
+//     console.log('User ID:', req.user?.id || 'No user');
+//     console.log('Car ID from body:', req.body.carId);
+//     console.log('============================================================\n\n');
 
+//     try {
+//         const bookedFrom = new Date(req.body.dateFrom);
+//         const bookedTo = new Date(req.body.dateTo);
+
+//         if (isNaN(bookedFrom.getTime()) || isNaN(bookedTo.getTime())) {
+//             return next(createError.BadRequest('Invalid date format'));
+//         }
+
+//         const currentDate = new Date();
+//         if (bookedFrom <= currentDate || bookedTo <= currentDate) {
+//             return next(createError.BadRequest('Dates must be in the future.'));
+//         }
+
+//         if (bookedTo <= bookedFrom) {
+//             return next(createError.BadRequest('To date should be greater than From date.'));
+//         }
+
+//         const car = await Car.findById(req.body.carId).populate(
+//             'driver',
+//             'name address fcmToken'
+//         );
+
+//         if (!car) {
+//             return next(createError.BadRequest('Invalid carId.'));
+//         }
+
+//         if (!car.driver) {
+//             console.warn(`[bookCar] No driver assigned to car ${req.body.carId}`);
+//             return next(createError.BadRequest('This car has no assigned driver.'));
+//         }
+
+//         const overlappingBooking = await Booking.findOne({
+//             car: req.body.carId,
+//             bookedFrom: { $lt: bookedTo },
+//             bookedTo: { $gt: bookedFrom },
+//             status: 'accepted',
+//         });
+
+//         if (overlappingBooking) {
+//             return next(createError.Conflict('rent.already'));
+//         }
+
+//         const { deliveryOption, amount, price } = req.body;
+
+//         let address;
+//         if (deliveryOption === 'delivery') {
+//             address = req.body.address;
+//         } else if (deliveryOption === 'pickup') {
+//             address = car.driver.address;
+//         } else {
+//             return next(createError.BadRequest('Invalid delivery option.'));
+//         }
+
+//         // ✅ Final amount decide karo (priority: amount > price > car.price > 0)
+//         const charge = await Charges.findOne();
+
+//         const fareBreakup = buildFareBreakup({
+//             car,
+//             charge,
+//             bookedFrom,
+//             bookedTo,
+//             deliveryOption,
+//             latitude: req.body.latitude,
+//             longitude: req.body.longitude,
+//         });
+
+//         // Backend fare ko priority, client amount sirf fallback
+//         const finalAmount = fareBreakup.estimatedTotal || Number(amount) || Number(price) || 0;
+
+//         if (finalAmount <= 0) {
+//             return next(createError.BadRequest('Amount or Price is required and must be greater than 0'));
+//         }
+
+//         // ✅ BookingReq create karo with correct amount
+//         const booking = await BookingReq.create({
+//             user: req.user.id,
+//             car: req.body.carId,
+//             driver: car.driver._id,
+//             deliveryOption,
+//             address,
+//             bookedFrom,
+//             bookedTo,
+//             pickupTime: req.body.pickupTime,
+//             returnTime: req.body.returnTime,
+//             status: 'requested',
+//             paymentStatus: 'pending',
+//             amount: finalAmount,   // ✅ FIXED: bookingReq.amount was undefined before
+//             fareBreakup
+//         });
+
+//         console.log(`✅ BookingReq Created Successfully | Amount: ₹${finalAmount} | ID: ${booking._id}`);
+
+//         // ── Send notification to driver ──────────────────────────────────
+//         if (car.driver.fcmToken) {
+//             const notificationPayload = {
+//                 driver: car.driver._id.toString(),
+//                 car: req.body.carId,
+//                 requestId: booking._id.toString(),
+//                 bookingId: booking._id.toString(),
+//                 title: 'New Booking Request',
+//                 body: `${req.user.name || 'A customer'} has requested to book ${car.name} from ${bookedFrom.toLocaleDateString()} to ${bookedTo.toLocaleDateString()}.`,
+//                 type: 'new_rent_request',
+//                 timestamp: new Date().toISOString(),
+//             };
+
+//             console.log('\n🔥 ABOUT TO SEND FCM NOTIFICATION 🔥');
+//             console.log('FCM Token (first 10 chars):', car.driver.fcmToken.substring(0, 10) + '...');
+//             console.log('Notification Title:', notificationPayload.title);
+
+//             try {
+//                 const response = await sendNotification(car.driver.fcmToken, notificationPayload);
+//                 console.log(`🎉 Notification sent to driver | Message ID: ${response}`);
+//             } catch (notifyError) {
+//                 console.error('❌ FCM NOTIFICATION FAILED ❌');
+//                 console.error('Error Code:', notifyError.code);
+//                 console.error('Error Message:', notifyError.message);
+//             }
+//         } else {
+//             console.warn('[bookCar] ❌ No FCM token found for driver ' + car.driver._id + ' — skipping notification');
+//         }
+
+//         res.json({
+//             code: '1',
+//             message: req.t('success') || 'Booking request created successfully',
+//             booking,
+//         });
+
+//     } catch (error) {
+//         console.error('[bookCar] GENERAL ERROR:', error.message);
+//         if (error.name === 'CastError') {
+//             return next(createError.BadRequest('Invalid carId or other ID format.'));
+//         }
+//         next(error);
+//     }
+// };
+
+exports.bookCar = async (req, res, next) => {
     try {
         const bookedFrom = new Date(req.body.dateFrom);
         const bookedTo = new Date(req.body.dateTo);
@@ -292,16 +489,34 @@ exports.bookCar = async (req, res, next) => {
             return next(createError.BadRequest('Invalid delivery option.'));
         }
 
-        // ✅ Final amount decide karo (priority: amount > price > car.price > 0)
-        const finalAmount = Number(amount) || Number(price) || Number(car.price) || 0;
+        // ✅ Rent fare: car price x days + delivery + service fee + tax
+        const [fareConfig, charge] = await Promise.all([
+            getActiveFareConfig(FareConfig),
+            Charges.findOne(),
+        ]);
 
-        console.log(`[bookCar] finalAmount calculated: ₹${finalAmount}`);
+        const fareBreakup = buildFareBreakup({
+            car,
+            fareConfig,
+            charge,
+            bookedFrom,
+            bookedTo,
+            deliveryOption,
+        });
+
+        const finalAmount =
+            fareBreakup.estimatedTotal ||
+            Number(amount) ||
+            Number(price) ||
+            Number(car.price) ||
+            0;
 
         if (finalAmount <= 0) {
-            return next(createError.BadRequest('Amount or Price is required and must be greater than 0'));
+            return next(
+                createError.BadRequest('Amount or Price is required and must be greater than 0')
+            );
         }
 
-        // ✅ BookingReq create karo with correct amount
         const booking = await BookingReq.create({
             user: req.user.id,
             car: req.body.carId,
@@ -314,10 +529,11 @@ exports.bookCar = async (req, res, next) => {
             returnTime: req.body.returnTime,
             status: 'requested',
             paymentStatus: 'pending',
-            amount: finalAmount,   // ✅ FIXED: bookingReq.amount was undefined before
+            amount: finalAmount,
+            fareBreakup,
         });
 
-        console.log(`✅ BookingReq Created Successfully | Amount: ₹${finalAmount} | ID: ${booking._id}`);
+        console.log(`✅ BookingReq Created | Amount: ${finalAmount} | ID: ${booking._id}`);
 
         // ── Send notification to driver ──────────────────────────────────
         if (car.driver.fcmToken) {
@@ -332,20 +548,14 @@ exports.bookCar = async (req, res, next) => {
                 timestamp: new Date().toISOString(),
             };
 
-            console.log('\n🔥 ABOUT TO SEND FCM NOTIFICATION 🔥');
-            console.log('FCM Token (first 10 chars):', car.driver.fcmToken.substring(0, 10) + '...');
-            console.log('Notification Title:', notificationPayload.title);
-
             try {
                 const response = await sendNotification(car.driver.fcmToken, notificationPayload);
                 console.log(`🎉 Notification sent to driver | Message ID: ${response}`);
             } catch (notifyError) {
-                console.error('❌ FCM NOTIFICATION FAILED ❌');
-                console.error('Error Code:', notifyError.code);
-                console.error('Error Message:', notifyError.message);
+                console.error('❌ FCM NOTIFICATION FAILED:', notifyError.code, notifyError.message);
             }
         } else {
-            console.warn('[bookCar] ❌ No FCM token found for driver ' + car.driver._id + ' — skipping notification');
+            console.warn(`[bookCar] No FCM token for driver ${car.driver._id} — skipping notification`);
         }
 
         res.json({
@@ -362,14 +572,14 @@ exports.bookCar = async (req, res, next) => {
         next(error);
     }
 };
-
 exports.tempPayment = async (req, res, next) => {
     try {
-        const [request, charge] = await Promise.all([
+        const [request, fareConfig, charge] = await Promise.all([
             BookingReq.findById(req.body.requestId)
                 .populate('car')
                 .populate('driver', 'name fcmToken')
                 .lean(),
+            getActiveFareConfig(FareConfig),
             Charges.findOne(),
         ]);
 
@@ -378,39 +588,35 @@ exports.tempPayment = async (req, res, next) => {
 
         const { _id, ...requestData } = request;
 
-        // Calculate days
-        const bookedFrom = new Date(request.bookedFrom);
-        const bookedTo = new Date(request.bookedTo);
-        bookedFrom.setHours(0, 0, 0, 0);
-        bookedTo.setHours(0, 0, 0, 0);
-        const days =
-            Math.ceil((bookedTo - bookedFrom) / (1000 * 60 * 60 * 24)) + 1;
-        if (days <= 0)
-            return next(createError.BadRequest('Invalid booking dates.'));
+        // ✅ Payment ke time admin ki latest settings se fare nikalo aur freeze karo
+        const fareBreakup = buildFareBreakup({
+            car: request.car,
+            fareConfig,
+            charge,
+            bookedFrom: request.bookedFrom,
+            bookedTo: request.bookedTo,
+            deliveryOption: request.deliveryOption,
+        });
 
-        // Calculate the total rent price
-        let price = request.car.price * days;
-        if (request.deliveryOption == 'delivery')
-            price += charge.carDeliveringFee;
-        requestData.price = price;
+        requestData.fareBreakup = fareBreakup;
+        requestData.price = fareBreakup.estimatedTotal;
         requestData.bookingReq = req.body.requestId;
 
-        // Set payment status to completed
         requestData.paymentStatus = 'completed';
         requestData.paymentMethod = req.body.paymentMethod || 'cash';
         requestData.paidAt = new Date();
 
         const booking = await Booking.create(requestData);
 
-        // Update BookingReq status to completed with payment info
         await BookingReq.findByIdAndUpdate(_id, {
             status: 'completed',
             paymentStatus: 'completed',
             paymentMethod: req.body.paymentMethod || 'cash',
-            paidAt: new Date()
+            paidAt: new Date(),
+            fareBreakup,
+            amount: fareBreakup.estimatedTotal,
         }).catch(error => console.log('Error updating booking request: ', error));
 
-        // Notify user about successful booking completion
         const data = {
             user: req.user.id,
             car: request.car._id,
@@ -420,7 +626,6 @@ exports.tempPayment = async (req, res, next) => {
         };
         sendNotification(req.user.fcmToken, data);
 
-        // FIX: Notify driver about completed payment
         const driverData = {
             driver: request.driver._id,
             car: request.car._id,
@@ -537,39 +742,81 @@ exports.addRating = async (req, res, next) => {
 //         const type = req.params.type; // 'current' or 'past'
 
 //         if (!['current', 'past'].includes(type)) {
-//             return next(createError.BadRequest('Invalid type parameter. Use "current" or "past"'));
+//             return next(
+//                 createError.BadRequest(
+//                     'Invalid type parameter. Use "current" or "past"'
+//                 )
+//             );
 //         }
 
 //         let queryOptions = {
 //             user: req.user.id,
-//             paymentStatus: 'completed',
+//             // paymentStatus: 'completed',
 //         };
 
 //         if (type === 'current') {
-//             // Ongoing or upcoming – signatures may not be complete yet
-//             queryOptions.status = { $in: ['accepted', 'completed'] };
-//             queryOptions.bookedTo = { $gte: currentDate };
-//         } else if (type === 'past') {
-//             // Truly finished trips – require both signatures + payment
-//             queryOptions.status = { $in: ['completed', 'cancelled'] }; // or only 'completed' if you want
-//             queryOptions.bookedTo = { $lt: currentDate };
+//             // Ongoing or upcoming
+//             queryOptions.status = {
+//                 $in: ['accepted', 'completed']
+//             };
 
-//             // Key change: both signatures must be present
+//             queryOptions.bookedTo = {
+//                 $gte: currentDate
+//             };
+
+//         } else if (type === 'past') {
+//             // Truly finished trips
+//             queryOptions.status = {
+//                 $in: ['completed', 'cancelled']
+//             };
+
+//             queryOptions.bookedTo = {
+//                 $lt: currentDate
+//             };
+
+//             // Both signatures must be present
 //             queryOptions.$and = [
-//                 { pickupSign: { $exists: true, $ne: null, $ne: "" } },
-//                 { returnSign: { $exists: true, $ne: null, $ne: "" } }
+//                 {
+//                     pickupSign: {
+//                         $exists: true,
+//                         $ne: null,
+//                         $ne: ""
+//                     }
+//                 },
+//                 {
+//                     returnSign: {
+//                         $exists: true,
+//                         $ne: null,
+//                         $ne: ""
+//                     }
+//                 }
 //             ];
 //         }
 
 //         const bookings = await Booking.find(queryOptions)
-//             .populate('user', 'profile name email country_code phone')
-//             .populate('car', 'name pics price kmsDriven model')
-//             .populate('driver', 'name phone')
+//             .populate(
+//                 'user',
+//                 'profile name email country_code phone'
+//             )
+//             .populate(
+//                 'car',
+//                 'name pics price kmsDriven model'
+//             )
+//             .populate(
+//                 'driver',
+//                 'name phone profile'
+//             )
 //             .select('-__v')
 //             .sort('-_id')
 //             .lean();
 
-//         const carIds = [...new Set(bookings.map(booking => booking.car._id))];
+//         const carIds = [
+//             ...new Set(
+//                 bookings
+//                     .filter(booking => booking.car)
+//                     .map(booking => booking.car._id)
+//             )
+//         ];
 
 //         const ratings = await Rating.find({
 //             car: { $in: carIds },
@@ -582,27 +829,47 @@ exports.addRating = async (req, res, next) => {
 //         bookings.forEach(booking => {
 
 //             booking.bookingId = booking._id;
-//             // First photo
-//             if (booking.car.pics?.length > 0) {
+
+//             // First car photo
+//             if (booking.car?.pics?.length > 0) {
 //                 booking.car.pic = booking.car.pics[0];
 //             }
-//             delete booking.car.pics;
+
+//             if (booking.car) {
+//                 delete booking.car.pics;
+//             }
 
 //             // Rating
-//             const rating = ratings.find(r => r.car.equals(booking.car._id));
+//             const rating = ratings.find(
+//                 r => r.car.equals(booking.car._id)
+//             );
+
 //             booking.rating = rating ? rating.rating : null;
 //             booking.comment = rating ? rating.comment : null;
 
 //             // Payment & completion flags
-//             booking.isPaid = booking.paymentStatus === 'completed';
-//             booking.hasPickupSign = !!booking.pickupSign && booking.pickupSign.trim() !== '';
-//             booking.hasReturnSign = !!booking.returnSign && booking.returnSign.trim() !== '';
-//             booking.isFullyCompleted = booking.isPaid && booking.hasPickupSign && booking.hasReturnSign;
+//             booking.isPaid =
+//                 booking.paymentStatus === 'completed';
+
+//             booking.hasPickupSign =
+//                 !!booking.pickupSign &&
+//                 booking.pickupSign.trim() !== '';
+
+//             booking.hasReturnSign =
+//                 !!booking.returnSign &&
+//                 booking.returnSign.trim() !== '';
+
+//             booking.isFullyCompleted =
+//                 booking.isPaid &&
+//                 booking.hasPickupSign &&
+//                 booking.hasReturnSign;
 //         });
 
 //         res.json({
 //             code: '1',
-//             message: req.t('success') || 'Bookings fetched successfully',
+//             message:
+//                 req.t('success') ||
+//                 'Bookings fetched successfully',
 //             type,
 //             bookings,
 //             count: bookings.length
@@ -613,6 +880,9 @@ exports.addRating = async (req, res, next) => {
 //         next(error);
 //     }
 // };
+
+exports.buildFareBreakup = buildFareBreakup;
+
 exports.getBookings = async (req, res, next) => {
     try {
         const currentDate = new Date();
@@ -620,79 +890,45 @@ exports.getBookings = async (req, res, next) => {
 
         if (!['current', 'past'].includes(type)) {
             return next(
-                createError.BadRequest(
-                    'Invalid type parameter. Use "current" or "past"'
-                )
+                createError.BadRequest('Invalid type parameter. Use "current" or "past"')
             );
         }
 
         let queryOptions = {
             user: req.user.id,
-            // paymentStatus: 'completed',
         };
 
         if (type === 'current') {
-            // Ongoing or upcoming
-            queryOptions.status = {
-                $in: ['accepted', 'completed']
-            };
-
-            queryOptions.bookedTo = {
-                $gte: currentDate
-            };
-
+            queryOptions.status = { $in: ['accepted', 'completed'] };
+            queryOptions.bookedTo = { $gte: currentDate };
         } else if (type === 'past') {
-            // Truly finished trips
-            queryOptions.status = {
-                $in: ['completed', 'cancelled']
-            };
+            queryOptions.status = { $in: ['completed', 'cancelled'] };
+            queryOptions.bookedTo = { $lt: currentDate };
 
-            queryOptions.bookedTo = {
-                $lt: currentDate
-            };
-
-            // Both signatures must be present
             queryOptions.$and = [
-                {
-                    pickupSign: {
-                        $exists: true,
-                        $ne: null,
-                        $ne: ""
-                    }
-                },
-                {
-                    returnSign: {
-                        $exists: true,
-                        $ne: null,
-                        $ne: ""
-                    }
-                }
+                { pickupSign: { $exists: true, $ne: null, $ne: '' } },
+                { returnSign: { $exists: true, $ne: null, $ne: '' } },
             ];
         }
 
-        const bookings = await Booking.find(queryOptions)
-            .populate(
-                'user',
-                'profile name email country_code phone'
-            )
-            .populate(
-                'car',
-                'name pics price kmsDriven model'
-            )
-            .populate(
-                'driver',
-                'name phone profile'
-            )
-            .select('-__v')
-            .sort('-_id')
-            .lean();
+        const [bookings, fareConfig, charge] = await Promise.all([
+            Booking.find(queryOptions)
+                .populate('user', 'profile name email country_code phone')
+                .populate('car', 'name pics price kmsDriven model')
+                .populate('driver', 'name phone profile')
+                .select('-__v')
+                .sort('-_id')
+                .lean(),
+            getActiveFareConfig(FareConfig),
+            Charges.findOne().lean(),
+        ]);
 
         const carIds = [
             ...new Set(
                 bookings
                     .filter(booking => booking.car)
-                    .map(booking => booking.car._id)
-            )
+                    .map(booking => String(booking.car._id))
+            ),
         ];
 
         const ratings = await Rating.find({
@@ -702,54 +938,74 @@ exports.getBookings = async (req, res, next) => {
             .select('car rating comment')
             .lean();
 
-        // Process each booking
         bookings.forEach(booking => {
-
             booking.bookingId = booking._id;
+
+            const isPaid = booking.paymentStatus === 'completed';
+
+            if (isPaid && booking.fareBreakup?.version === 2) {
+                // Paid: payment ke time ka fare freeze
+                booking.fare = booking.fareBreakup;
+            } else if (booking.car) {
+                // Unpaid (ya purani paid): admin ki current settings se live fare
+                const calc = buildFareBreakup({
+                    car: booking.car,
+                    fareConfig,
+                    charge,
+                    bookedFrom: booking.bookedFrom,
+                    bookedTo: booking.bookedTo,
+                    deliveryOption: booking.deliveryOption,
+                });
+
+                if (isPaid) {
+                    // Purani paid booking: jo customer ne diya wo nahi badlega
+                    calc.legacyPaidPrice = booking.price;
+                    calc.estimatedTotal = booking.price;
+                    calc.isEstimated = true;
+                } else {
+                    booking.price = calc.estimatedTotal;
+                }
+                booking.fare = calc;
+            } else {
+                booking.fare = null;
+            }
+            delete booking.fareBreakup;
 
             // First car photo
             if (booking.car?.pics?.length > 0) {
                 booking.car.pic = booking.car.pics[0];
             }
-
             if (booking.car) {
                 delete booking.car.pics;
             }
 
             // Rating
-            const rating = ratings.find(
-                r => r.car.equals(booking.car._id)
-            );
+            const rating = booking.car
+                ? ratings.find(r => r.car.equals(booking.car._id))
+                : null;
 
             booking.rating = rating ? rating.rating : null;
             booking.comment = rating ? rating.comment : null;
 
             // Payment & completion flags
-            booking.isPaid =
-                booking.paymentStatus === 'completed';
+            booking.isPaid = isPaid;
 
             booking.hasPickupSign =
-                !!booking.pickupSign &&
-                booking.pickupSign.trim() !== '';
+                !!booking.pickupSign && booking.pickupSign.trim() !== '';
 
             booking.hasReturnSign =
-                !!booking.returnSign &&
-                booking.returnSign.trim() !== '';
+                !!booking.returnSign && booking.returnSign.trim() !== '';
 
             booking.isFullyCompleted =
-                booking.isPaid &&
-                booking.hasPickupSign &&
-                booking.hasReturnSign;
+                booking.isPaid && booking.hasPickupSign && booking.hasReturnSign;
         });
 
         res.json({
             code: '1',
-            message:
-                req.t('success') ||
-                'Bookings fetched successfully',
+            message: req.t('success') || 'Bookings fetched successfully',
             type,
             bookings,
-            count: bookings.length
+            count: bookings.length,
         });
 
     } catch (error) {
@@ -927,16 +1183,106 @@ exports.uploadSignature = async (req, res, next) => {
 
 // ✅ Fare Details — before booking confirm
 // ✅ Fare Details — before booking confirm
+// exports.getFareDetails = async (req, res, next) => {
+//     try {
+//         const {
+//             carId,
+//             dateFrom,
+//             dateTo,
+//             deliveryOption,   // 'delivery' or 'pickup'
+//             latitude,         // delivery location (only needed if deliveryOption = 'delivery')
+//             longitude,
+//         } = req.body;
+
+//         if (!carId) return next(createError.BadRequest('carId is required.'));
+//         if (!dateFrom || !dateTo)
+//             return next(createError.BadRequest('dateFrom and dateTo are required.'));
+//         if (!['delivery', 'pickup'].includes(deliveryOption))
+//             return next(createError.BadRequest('Invalid delivery option.'));
+
+//         const bookedFrom = new Date(dateFrom);
+//         const bookedTo = new Date(dateTo);
+
+//         if (isNaN(bookedFrom.getTime()) || isNaN(bookedTo.getTime()))
+//             return next(createError.BadRequest('Invalid date format.'));
+//         if (bookedTo <= bookedFrom)
+//             return next(createError.BadRequest('To date should be greater than From date.'));
+
+//         const [car, charge] = await Promise.all([
+//             Car.findOne({ _id: carId, isDeleted: false }),
+//             Charges.findOne(),
+//         ]);
+
+//         if (!car) return next(createError.BadRequest('Invalid carId.'));
+
+//         bookedFrom.setHours(0, 0, 0, 0);
+//         const toMidnight = new Date(bookedTo);
+//         toMidnight.setHours(0, 0, 0, 0);
+//         const days = Math.ceil((toMidnight - bookedFrom) / (1000 * 60 * 60 * 24)) + 1;
+
+//         if (days <= 0) return next(createError.BadRequest('Invalid booking dates.'));
+
+//         // 1. Base Fare — total rental cost for selected days (per-day price × days)
+//         const perDayRate = Number(car.price) || 0;
+//         const baseFare = Number((perDayRate * days).toFixed(2));
+
+//         // 2. Distance Charge — sirf delivery option pe
+//         let distanceCharge = 0;
+
+//         if (deliveryOption === 'delivery') {
+//             if (!latitude || !longitude)
+//                 return next(createError.BadRequest('latitude and longitude are required for delivery.'));
+
+//             let distanceKm = 0;
+//             if (car.location?.coordinates?.length === 2) {
+//                 const carLat = car.location.coordinates[1];
+//                 const carLng = car.location.coordinates[0];
+
+//                 const distanceMeters = geolib.getDistance(
+//                     { latitude: carLat, longitude: carLng },
+//                     { latitude: Number(latitude), longitude: Number(longitude) }
+//                 );
+//                 distanceKm = distanceMeters / 1000;
+//             }
+
+//             distanceCharge = Number((distanceKm * (Number(charge?.deliveryRatePerKm) || 0)).toFixed(2));
+//             // distanceCharge = Number(charge?.carDeliveringFee) || 0; // agar flat fee hai to isse use karo
+//         }
+
+//         // 3. Platform Fee
+//         const platformFee = Number(charge?.bookingFee) || 0;
+
+//         // 4. Surge Charge
+//         const surgeMultiplier = Number(charge?.surgeMultiplier) || 1;
+//         const subtotal = baseFare + distanceCharge + platformFee;
+//         const surgeCharge = Number((subtotal * surgeMultiplier - subtotal).toFixed(2));
+
+//         // 5. Estimated Total
+//         const estimatedTotal = Number((subtotal + surgeCharge).toFixed(2));
+
+//         // ✅ UI-matching response — exactly 5 fields shown in Fare Details modal
+//         res.json({
+//             code: '1',
+//             message: 'Fare details fetched successfully',
+//             data: {
+//                 baseFare,
+//                 distanceCharge,
+//                 platformFee,
+//                 surgeCharge,
+//                 estimatedTotal,
+//             },
+//         });
+//     } catch (error) {
+//         console.error('❌ getFareDetails Error:', error);
+//         if (error.name === 'CastError')
+//             return next(createError.BadRequest('Invalid carId.'));
+//         next(error);
+//     }
+// };
+
 exports.getFareDetails = async (req, res, next) => {
     try {
-        const {
-            carId,
-            dateFrom,
-            dateTo,
-            deliveryOption,   // 'delivery' or 'pickup'
-            latitude,         // delivery location (only needed if deliveryOption = 'delivery')
-            longitude,
-        } = req.body;
+        const { carId, dateFrom, dateTo, deliveryOption } = req.body;
 
         if (!carId) return next(createError.BadRequest('carId is required.'));
         if (!dateFrom || !dateTo)
@@ -952,68 +1298,31 @@ exports.getFareDetails = async (req, res, next) => {
         if (bookedTo <= bookedFrom)
             return next(createError.BadRequest('To date should be greater than From date.'));
 
-        const [car, charge] = await Promise.all([
+        const [car, fareConfig, charge] = await Promise.all([
             Car.findOne({ _id: carId, isDeleted: false }),
+            getActiveFareConfig(FareConfig),
             Charges.findOne(),
         ]);
 
         if (!car) return next(createError.BadRequest('Invalid carId.'));
 
-        bookedFrom.setHours(0, 0, 0, 0);
-        const toMidnight = new Date(bookedTo);
-        toMidnight.setHours(0, 0, 0, 0);
-        const days = Math.ceil((toMidnight - bookedFrom) / (1000 * 60 * 60 * 24)) + 1;
+        const fare = buildFareBreakup({
+            car, fareConfig, charge, bookedFrom, bookedTo, deliveryOption,
+        });
 
-        if (days <= 0) return next(createError.BadRequest('Invalid booking dates.'));
-
-        // 1. Base Fare — total rental cost for selected days (per-day price × days)
-        const perDayRate = Number(car.price) || 0;
-        const baseFare = Number((perDayRate * days).toFixed(2));
-
-        // 2. Distance Charge — sirf delivery option pe
-        let distanceCharge = 0;
-
-        if (deliveryOption === 'delivery') {
-            if (!latitude || !longitude)
-                return next(createError.BadRequest('latitude and longitude are required for delivery.'));
-
-            let distanceKm = 0;
-            if (car.location?.coordinates?.length === 2) {
-                const carLat = car.location.coordinates[1];
-                const carLng = car.location.coordinates[0];
-
-                const distanceMeters = geolib.getDistance(
-                    { latitude: carLat, longitude: carLng },
-                    { latitude: Number(latitude), longitude: Number(longitude) }
-                );
-                distanceKm = distanceMeters / 1000;
-            }
-
-            distanceCharge = Number((distanceKm * (Number(charge?.deliveryRatePerKm) || 0)).toFixed(2));
-            // distanceCharge = Number(charge?.carDeliveringFee) || 0; // agar flat fee hai to isse use karo
-        }
-
-        // 3. Platform Fee
-        const platformFee = Number(charge?.bookingFee) || 0;
-
-        // 4. Surge Charge
-        const surgeMultiplier = Number(charge?.surgeMultiplier) || 1;
-        const subtotal = baseFare + distanceCharge + platformFee;
-        const surgeCharge = Number((subtotal * surgeMultiplier - subtotal).toFixed(2));
-
-        // 5. Estimated Total
-        const estimatedTotal = Number((subtotal + surgeCharge).toFixed(2));
-
-        // ✅ UI-matching response — exactly 5 fields shown in Fare Details modal
         res.json({
             code: '1',
             message: 'Fare details fetched successfully',
             data: {
-                baseFare,
-                distanceCharge,
-                platformFee,
-                surgeCharge,
-                estimatedTotal,
+                days: fare.days,
+                perDayRate: fare.perDayRate,
+                rentalAmount: fare.rentalAmount,
+                deliveryFee: fare.deliveryFee,
+                fees: fare.fees,
+                serviceFee: fare.serviceFee,
+                taxPercentage: fare.taxPercentage,
+                taxes: fare.taxes,
+                estimatedTotal: fare.estimatedTotal,
             },
         });
     } catch (error) {
@@ -1023,8 +1332,102 @@ exports.getFareDetails = async (req, res, next) => {
         next(error);
     }
 };
-
 // ✅ Reschedule Booking — dates change karne ke liye (booking confirm hone se pehle)
+// exports.rescheduleBooking = async (req, res, next) => {
+//     try {
+//         const { id, dateFrom, dateTo } = req.body;
+
+//         if (!id) return next(createError.BadRequest('Booking ID is required.'));
+//         if (!dateFrom || !dateTo)   
+//             return next(createError.BadRequest('dateFrom and dateTo are required.'));
+
+//         const newFrom = new Date(dateFrom);
+//         const newTo = new Date(dateTo);
+
+//         if (isNaN(newFrom.getTime()) || isNaN(newTo.getTime()))
+//             return next(createError.BadRequest('Invalid date format.'));
+
+//         const currentDate = new Date();
+//         if (newFrom <= currentDate || newTo <= currentDate)
+//             return next(createError.BadRequest('Dates must be in the future.'));
+//         if (newTo <= newFrom)
+//             return next(createError.BadRequest('To date should be greater than From date.'));
+
+//         // Sirf requested/accepted bookings reschedule ho sakti hain
+//         const booking = await BookingReq.findOne({
+//             _id: id,
+//             user: req.user.id,
+//             status: { $in: ['requested', 'accepted'] },
+//         }).populate('driver', 'name fcmToken').populate('car', 'name price');
+
+//         if (!booking)
+//             return next(createError.NotFound('Booking not found or cannot be rescheduled.'));
+
+//         // Overlap check — same car dusri accepted booking se clash na ho
+//         const overlapping = await Booking.findOne({
+//             car: booking.car._id,
+//             _id: { $ne: booking._id },
+//             bookedFrom: { $lt: newTo },
+//             bookedTo: { $gt: newFrom },
+//             status: 'accepted',
+//         });
+//         if (overlapping)
+//             return next(createError.Conflict('Car is already booked for the selected dates.'));
+
+//         const oldFrom = booking.bookedFrom;
+//         const oldTo = booking.bookedTo;
+
+//         booking.bookedFrom = newFrom;
+//         booking.bookedTo = newTo;
+
+//         // Agar booking already accepted thi, reschedule ke baad driver se dobara confirm karwana padega
+//         if (booking.status === 'accepted') {
+//             booking.status = 'requested';
+//         }
+
+//         await booking.save();
+
+//         // Main Booking record bhi update karo agar ban chuka tha
+//         await Booking.findOneAndUpdate(
+//             { bookingReq: booking._id },
+//             { bookedFrom: newFrom, bookedTo: newTo, status: 'accepted' }
+//         ).catch(err => console.log('Main booking reschedule update error:', err.message));
+
+//         // Driver ko notify karo
+//         if (booking.driver?.fcmToken) {
+//             try {
+//                 await sendNotification(booking.driver.fcmToken, {
+//                     driver: booking.driver._id.toString(),
+//                     bookingId: booking._id.toString(),
+//                     title: 'Booking Rescheduled',
+//                     body: `${req.user.name} has rescheduled the booking for ${booking.car.name}. Please confirm the new dates.`,
+//                     type: 'booking_rescheduled',
+//                 });
+//             } catch (notifErr) {
+//                 console.log('Reschedule notification error:', notifErr.message);
+//             }
+//         }
+
+//         res.json({
+//             code: '1',
+//             message: 'Booking rescheduled successfully',
+//             booking: {
+//                 id: booking._id,
+//                 oldDates: { from: oldFrom, to: oldTo },
+//                 newDates: { from: newFrom, to: newTo },
+//                 status: booking.status,
+//             },
+//         });
+//     } catch (error) {
+//         console.error('❌ rescheduleBooking Error:', error);
+//         if (error.name === 'CastError')
+//             return next(createError.BadRequest('Invalid booking id.'));
+//         next(error);
+//     }
+// };
+
+// ✅ Reschedule Booking — dates change karne ke liye
+// id: Booking ki _id ya BookingReq ki _id, dono chalengi
 exports.rescheduleBooking = async (req, res, next) => {
     try {
         const { id, dateFrom, dateTo } = req.body;
@@ -1045,20 +1448,49 @@ exports.rescheduleBooking = async (req, res, next) => {
         if (newTo <= newFrom)
             return next(createError.BadRequest('To date should be greater than From date.'));
 
-        // Sirf requested/accepted bookings reschedule ho sakti hain
-        const booking = await BookingReq.findOne({
+        // ===== TEMP DEBUG: kaam hone ke baad hata dena =====
+        console.log('---- RESCHEDULE DEBUG ----');
+        console.log('id from body :', JSON.stringify(id));
+        console.log('logged user  :', String(req.user.id));
+
+        const dbgReq = await BookingReq.findById(id).select('user status paymentStatus car').lean();
+        const dbgMain = await Booking.findById(id).select('user status bookingReq paymentStatus car').lean();
+
+        console.log('BookingReq found:', dbgReq);
+        console.log('Booking found   :', dbgMain);
+        console.log('--------------------------');
+
+        // 1) Pehle BookingReq me dhundo (id BookingReq ki ho sakti he)
+        let booking = await BookingReq.findOne({
             _id: id,
             user: req.user.id,
-            status: { $in: ['requested', 'accepted'] },
-        }).populate('driver', 'name fcmToken').populate('car', 'name price');
+            status: { $in: ['requested', 'accepted', 'completed'] },
+        })
+            .populate('driver', 'name fcmToken')
+            .populate('car', 'name price');
+
+        // 2) Nahi mila to id ko main Booking ki id maan ke dhundo
+        if (!booking) {
+            const mainBooking = await Booking.findOne({
+                _id: id,
+                user: req.user.id,
+                status: { $in: ['accepted', 'completed'] },
+            }).select('bookingReq');
+
+            if (mainBooking?.bookingReq) {
+                booking = await BookingReq.findById(mainBooking.bookingReq)
+                    .populate('driver', 'name fcmToken')
+                    .populate('car', 'name price');
+            }
+        }
 
         if (!booking)
             return next(createError.NotFound('Booking not found or cannot be rescheduled.'));
 
-        // Overlap check — same car dusri accepted booking se clash na ho
+        // Overlap check — apni hi booking ko exclude karo
         const overlapping = await Booking.findOne({
             car: booking.car._id,
-            _id: { $ne: booking._id },
+            bookingReq: { $ne: booking._id },
             bookedFrom: { $lt: newTo },
             bookedTo: { $gt: newFrom },
             status: 'accepted',
@@ -1072,17 +1504,17 @@ exports.rescheduleBooking = async (req, res, next) => {
         booking.bookedFrom = newFrom;
         booking.bookedTo = newTo;
 
-        // Agar booking already accepted thi, reschedule ke baad driver se dobara confirm karwana padega
-        if (booking.status === 'accepted') {
+        // Sirf unpaid + accepted request ko dobara driver confirmation ke liye 'requested' karo
+        if (booking.status === 'accepted' && booking.paymentStatus !== 'completed') {
             booking.status = 'requested';
         }
 
         await booking.save();
 
-        // Main Booking record bhi update karo agar ban chuka tha
+        // Main Booking me sirf dates update karo (status mat badlo)
         await Booking.findOneAndUpdate(
             { bookingReq: booking._id },
-            { bookedFrom: newFrom, bookedTo: newTo, status: 'accepted' }
+            { bookedFrom: newFrom, bookedTo: newTo }
         ).catch(err => console.log('Main booking reschedule update error:', err.message));
 
         // Driver ko notify karo
@@ -1092,7 +1524,7 @@ exports.rescheduleBooking = async (req, res, next) => {
                     driver: booking.driver._id.toString(),
                     bookingId: booking._id.toString(),
                     title: 'Booking Rescheduled',
-                    body: `${req.user.name} has rescheduled the booking for ${booking.car.name}. Please confirm the new dates.`,
+                    body: `${req.user.name} has rescheduled the booking for ${booking.car.name} from ${newFrom.toLocaleDateString()} to ${newTo.toLocaleDateString()}.`,
                     type: 'booking_rescheduled',
                 });
             } catch (notifErr) {
@@ -1119,60 +1551,135 @@ exports.rescheduleBooking = async (req, res, next) => {
 };
 
 // ✅ Price Summary — "Car Rental / Service Fee / Taxes / Total" screen ke liye
+// exports.getPriceSummary = async (req, res, next) => {
+//     try {
+//         const { carId, dateFrom, dateTo } = req.body;
+
+//         if (!carId) return next(createError.BadRequest('carId is required.'));
+//         if (!dateFrom || !dateTo)
+//             return next(createError.BadRequest('dateFrom and dateTo are required.'));
+
+//         const bookedFrom = new Date(dateFrom);
+//         const bookedTo = new Date(dateTo);
+
+//         if (isNaN(bookedFrom.getTime()) || isNaN(bookedTo.getTime()))
+//             return next(createError.BadRequest('Invalid date format.'));
+//         if (bookedTo <= bookedFrom)
+//             return next(createError.BadRequest('To date should be greater than From date.'));
+
+//         const [car, charge] = await Promise.all([
+//             Car.findOne({ _id: carId, isDeleted: false }),
+//             Charges.findOne(),
+//         ]);
+
+//         if (!car) return next(createError.BadRequest('Invalid carId.'));
+
+//         bookedFrom.setHours(0, 0, 0, 0);
+//         const toMidnight = new Date(bookedTo);
+//         toMidnight.setHours(0, 0, 0, 0);
+//         const days = Math.ceil((toMidnight - bookedFrom) / (1000 * 60 * 60 * 24)) + 1;
+
+//         if (days <= 0) return next(createError.BadRequest('Invalid booking dates.'));
+
+//         // 1. Car Rental — per day price × days
+//         const perDayRate = Number(car.price) || 0;
+//         const carRental = Number((perDayRate * days).toFixed(2));
+
+//         // 2. Service Fee
+//         const serviceFee = Number(charge?.bookingFee) || 0;
+
+//         // 3. Taxes — percentage on (carRental + serviceFee)
+//         const taxPercentage = Number(charge?.taxPercentage) || 0;
+//         const taxes = Number((((carRental + serviceFee) * taxPercentage) / 100).toFixed(2));
+
+//         // 4. Total
+//         const total = Number((carRental + serviceFee + taxes).toFixed(2));
+
+//         res.json({
+//             code: '1',
+//             message: 'Price summary fetched successfully',
+//             data: {
+//                 days,
+//                 carRentalLabel: `Car Rental (${days} Day${days > 1 ? 's' : ''})`,
+//                 carRental,
+//                 serviceFee,
+//                 taxes,
+//                 total,
+//             },
+//         });
+//     } catch (error) {
+//         console.error('❌ getPriceSummary Error:', error);
+//         if (error.name === 'CastError')
+//             return next(createError.BadRequest('Invalid carId.'));
+//         next(error);
+//     }
+// };
+
 exports.getPriceSummary = async (req, res, next) => {
     try {
         const { carId, dateFrom, dateTo } = req.body;
+        const selectedOption = req.body.deliveryOption === 'delivery' ? 'delivery' : 'pickup';
 
         if (!carId) return next(createError.BadRequest('carId is required.'));
         if (!dateFrom || !dateTo)
             return next(createError.BadRequest('dateFrom and dateTo are required.'));
 
         const bookedFrom = new Date(dateFrom);
-        const bookedTo = new Date(dateTo);
+        const bookedTo = new Date(dateTo);  
 
         if (isNaN(bookedFrom.getTime()) || isNaN(bookedTo.getTime()))
             return next(createError.BadRequest('Invalid date format.'));
+        
         if (bookedTo <= bookedFrom)
             return next(createError.BadRequest('To date should be greater than From date.'));
 
-        const [car, charge] = await Promise.all([
+        const [car, fareConfig, charge] = await Promise.all([
             Car.findOne({ _id: carId, isDeleted: false }),
+            getActiveFareConfig(FareConfig),
             Charges.findOne(),
         ]);
 
         if (!car) return next(createError.BadRequest('Invalid carId.'));
 
-        bookedFrom.setHours(0, 0, 0, 0);
-        const toMidnight = new Date(bookedTo);
-        toMidnight.setHours(0, 0, 0, 0);
-        const days = Math.ceil((toMidnight - bookedFrom) / (1000 * 60 * 60 * 24)) + 1;
+        const common = { car, fareConfig, charge, bookedFrom, bookedTo };
+        const pickup = buildFareBreakup({ ...common, deliveryOption: 'pickup' });
+        const delivery = buildFareBreakup({ ...common, deliveryOption: 'delivery' });
 
-        if (days <= 0) return next(createError.BadRequest('Invalid booking dates.'));
+        const toBreakup = fare => ({
+            rentalAmount: fare.rentalAmount,
+            deliveryFee: fare.deliveryFee,
+            fees: fare.fees,
+            serviceFee: fare.serviceFee,
+            taxPercentage: fare.taxPercentage,
+            taxes: fare.taxes,
+        });
 
-        // 1. Car Rental — per day price × days
-        const perDayRate = Number(car.price) || 0;
-        const carRental = Number((perDayRate * days).toFixed(2));
-
-        // 2. Service Fee
-        const serviceFee = Number(charge?.bookingFee) || 0;
-
-        // 3. Taxes — percentage on (carRental + serviceFee)
-        const taxPercentage = Number(charge?.taxPercentage) || 0;
-        const taxes = Number((((carRental + serviceFee) * taxPercentage) / 100).toFixed(2));
-
-        // 4. Total
-        const total = Number((carRental + serviceFee + taxes).toFixed(2));
+        const selected = selectedOption === 'delivery' ? delivery : pickup;
 
         res.json({
             code: '1',
             message: 'Price summary fetched successfully',
             data: {
-                days,
-                carRentalLabel: `Car Rental (${days} Day${days > 1 ? 's' : ''})`,
-                carRental,
-                serviceFee,
-                taxes,
-                total,
+                days: pickup.days,
+                perDayRate: pickup.perDayRate,
+                rentalAmount: pickup.rentalAmount,
+                selectedOption,
+                breakup: toBreakup(selected),
+                total: selected.estimatedTotal,
+                options: [
+                    {
+                        key: 'pickup',
+                        fee: pickup.deliveryFee,        // 0 => app "Free" dikhaye
+                        breakup: toBreakup(pickup),
+                        total: pickup.estimatedTotal,
+                    },
+                    {
+                        key: 'delivery',
+                        fee: delivery.deliveryFee,      // admin ka delivery fee (jaise 7)
+                        breakup: toBreakup(delivery),
+                        total: delivery.estimatedTotal,
+                    },
+                ],
             },
         });
     } catch (error) {

@@ -53,8 +53,8 @@
                             <span class="icon-bar"></span>
                         </button>
                         <a class="navbar-brand" href="/">
-                            <embed src="/frontend/images/logo.svg" height="50px" class="color_logo">
-                            <embed src="/frontend/images/white_logo.svg" height="50px" class="white_logo">
+                            <img src="/frontend/images/logo.svg" alt="Dynasty" height="50" class="color_logo">
+                            <img src="/frontend/images/white_logo.svg" alt="Dynasty" height="50" class="white_logo">
                         </a>
                     </div>
                     <!-- Collect the nav links, forms, and other content for toggling -->
@@ -110,6 +110,9 @@
                         <p>TLorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.</p>
                     </div> -->
                     <div class="col-md-12 app-description-content wow fadeInUp" data-wow-duration="1.5s" data-wow-delay=".3s">
+                        <% if (typeof content !== 'undefined' && content && content.trim()) { %>
+                            <%- content %>
+                        <% } else { %>
                         <h4>User Agreement</h4>
                         <p>By using the Dynasty app and its services, you agree to abide by the terms and conditions outlined in this agreement. This agreement governs the relationship between Dynasty and its users.</p>
                         <h4>Eligibility</h4>
@@ -124,6 +127,7 @@
                         <p>Engaging in any illegal, harmful, or disruptive activities on the Dynasty app is strictly prohibited. Users must adhere to the local laws and regulations while using the platform.</p>
                         <h4>Dispute Resolution</h4>
                         <p>In the event of any disputes arising from the use of the Dynasty app, both parties agree to attempt to resolve the matter amicably through negotiations. If no resolution is reached, arbitration or other applicable legal remedies may be pursued.</p>
+                        <% } %>
                     </div>
                 </div>
             </div>

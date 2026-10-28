@@ -466,24 +466,179 @@ const resolveTypes = (input, validTypes) => {
     return validTypes.filter((v) => txNorm(v).startsWith(n));
 };
  
+// /**
+//  * Get driver's transaction history with filters
+//  */
+// exports.getTransactionHistory = async (req, res, next) => {
+//     try {
+//         const { page = 1, limit = 20, status, startDate, endDate } = req.query;
+//         const rawType = String(req.query.type || '').trim();
+//         const search = String(req.query.search || '').trim();
+//         const flowFilter = String(req.query.filter || 'all').toLowerCase().trim();
+//         const skip = (page - 1) * limit;
+ 
+//         if (!['all', 'credit', 'debit'].includes(flowFilter))
+//             return next(createError.BadRequest('filter must be one of: all, credit, debit'));
+ 
+//         const query = { driverId: req.driver._id };
+//         const andConds = [];
+ 
+//         // ✅ Valid types (dynamic):
+//         //   walletTypes -> Wallet.type (model enum + is driver ki entries)
+//         //   sourceTypes -> Transaction.type enum (ride_payment, bike, rent car, ...)
+//         const walletTypes = [
+//             ...new Set([
+//                 ...(Wallet.schema.path('type').enumValues || []),
+//                 ...(await Wallet.distinct('type', { driverId: req.driver._id })).filter(Boolean),
+//             ]),
+//         ];
+//         const sourceTypes = Transaction.schema.path('type').enumValues || [];
+ 
+//         // ✅ type filter
+//         if (rawType && txNorm(rawType) !== 'all') {
+//             const walletMatched = resolveTypes(rawType, walletTypes);
+//             const sourceMatched = resolveTypes(rawType, sourceTypes);
+ 
+//             if (!walletMatched.length && !sourceMatched.length) {
+//                 const allowed = [...new Set([...walletTypes, ...sourceTypes])];
+//                 return next(
+//                     createError.BadRequest(`type must be one of: all, ${allowed.join(', ')}`)
+//                 );
+//             }
+ 
+//             const typeOr = [];
+//             if (walletMatched.length) typeOr.push({ type: { $in: walletMatched } });
+//             sourceMatched.forEach((v) => {
+//                 // rent type -> bookingId wali entries, baaki (ride_payment, bike) -> rideId wali
+//                 typeOr.push(
+//                     txNorm(v).includes('rent')
+//                         ? { bookingId: { $exists: true, $ne: null } }
+//                         : { rideId: { $exists: true, $ne: null } }
+//                 );
+//             });
+//             andConds.push({ $or: typeOr });
+//         }
+ 
+//         // ✅ All / Credit / Debit filter
+//         if (flowFilter === 'debit') andConds.push({ type: { $in: DEBIT_TYPES } });
+//         else if (flowFilter === 'credit') andConds.push({ type: { $nin: DEBIT_TYPES } });
+ 
+//         if (andConds.length) query.$and = andConds;
+ 
+//         if (status) query.status = status;
+//         if (startDate || endDate) {
+//             query.createdAt = {};
+//             if (startDate) query.createdAt.$gte = new Date(startDate);
+//             if (endDate) query.createdAt.$lte = new Date(endDate);
+//         }
+ 
+//         // ✅ Search: description, ride ka pickup/drop address, ya amount
+//         if (search) {
+//             const rx = new RegExp(escapeRegex(search), 'i');
+ 
+//             const matchedRides = await Ride.find({
+//                 driver: req.driver._id,
+//                 $or: [{ pickupAddress: rx }, { endAddress: rx }],
+//             }).select('_id');
+ 
+//             const or = [
+//                 { description: rx },
+//                 { rideId: { $in: matchedRides.map((r) => r._id) } },
+//             ];
+ 
+//             const num = parseFloat(search);
+//             if (Number.isFinite(num)) {
+//                 const cents = Math.round(num * 100);
+//                 or.push({ amount: cents }, { netAmount: cents });
+//             }
+ 
+//             query.$or = or;
+//         }
+ 
+//         const [transactions, total] = await Promise.all([
+//             Wallet.find(query)
+//                 .sort({ createdAt: -1 })
+//                 .skip(skip)
+//                 .limit(parseInt(limit))
+//                 .populate('rideId', 'pickupAddress endAddress price')
+//                 .populate('bookingId', 'address price bookedFrom bookedTo')
+//                 .select('-__v'),
+//             Wallet.countDocuments(query),
+//         ]);
+ 
+//         const formattedTransactions = transactions.map(t => {
+//             const isDebit = DEBIT_TYPES.includes(t.type);
+ 
+//             return {
+//                 ...t.toObject(),
+//                 walletType: t.type, // asli Wallet type (add / withdrawal / ...), agar app ko chahiye
+//                 flow: isDebit ? 'debit' : 'credit',
+ 
+//                 // ✅ App ke liye display type: credit -> "Received", debit -> "Withdraw"
+//                 type: isDebit ? 'Withdraw' : 'Received',
+ 
+//                 formattedAmount: t.amount / 100,
+//                 formattedNetAmount: t.netAmount ? t.netAmount / 100 : null,
+//                 formattedFee: t.processingFee ? t.processingFee / 100 : null,
+//             };
+//         });
+ 
+//         // App ke type chips ke liye (dynamic): [{ key, label }]
+//         const availableTypes = [
+//             { key: 'all', label: 'All' },
+//             ...[...new Set([...walletTypes, ...sourceTypes])].map((v) => ({
+//                 key: v,
+//                 label: txLabel(v),
+//             })),
+//         ];
+ 
+//         res.json({
+//             code: '1',
+//             message: req.t('success'),
+//             filter: flowFilter,
+//             availableTypes,
+//             transactions: formattedTransactions,
+//             pagination: {
+//                 currentPage: parseInt(page),
+//                 totalPages: Math.ceil(total / limit),
+//                 totalTransactions: total,
+//                 hasMore: skip + transactions.length < total,
+//             },
+//         });
+//     } catch (error) {
+//         console.error('Get transaction history error:', error);
+//         next(error);
+//     }
+// };
+
 /**
  * Get driver's transaction history with filters
  */
 exports.getTransactionHistory = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20, status, startDate, endDate } = req.query;
+        const { status, startDate, endDate } = req.query;
         const rawType = String(req.query.type || '').trim();
         const search = String(req.query.search || '').trim();
         const flowFilter = String(req.query.filter || 'all').toLowerCase().trim();
+
+        // ✅ CHANGED 1: ?page&limit (khali value) aaye to bhi default lage
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
         const skip = (page - 1) * limit;
- 
+
         if (!['all', 'credit', 'debit'].includes(flowFilter))
             return next(createError.BadRequest('filter must be one of: all, credit, debit'));
- 
+
         const query = { driverId: req.driver._id };
         const andConds = [];
- 
-        // ✅ Valid types (dynamic):
+
+        // ✅ CHANGED 2: withdrawal_fee ki alag row nahi dikhani.
+        // Fee withdrawal row me hi (formattedFee / formattedNetAmount) aati he.
+        // DB me fee row rahegi (balance calculation ke liye), sirf list se hide hogi.
+        const HIDDEN_TYPES = ['withdrawal_fee'];
+        andConds.push({ type: { $nin: HIDDEN_TYPES } });
+
+        // Valid types (dynamic):
         //   walletTypes -> Wallet.type (model enum + is driver ki entries)
         //   sourceTypes -> Transaction.type enum (ride_payment, bike, rent car, ...)
         const walletTypes = [
@@ -491,21 +646,21 @@ exports.getTransactionHistory = async (req, res, next) => {
                 ...(Wallet.schema.path('type').enumValues || []),
                 ...(await Wallet.distinct('type', { driverId: req.driver._id })).filter(Boolean),
             ]),
-        ];
+        ].filter((v) => !HIDDEN_TYPES.includes(v)); // ✅ CHANGED 3: chips se bhi hata diya
         const sourceTypes = Transaction.schema.path('type').enumValues || [];
- 
-        // ✅ type filter
+
+        // type filter
         if (rawType && txNorm(rawType) !== 'all') {
             const walletMatched = resolveTypes(rawType, walletTypes);
             const sourceMatched = resolveTypes(rawType, sourceTypes);
- 
+
             if (!walletMatched.length && !sourceMatched.length) {
                 const allowed = [...new Set([...walletTypes, ...sourceTypes])];
                 return next(
                     createError.BadRequest(`type must be one of: all, ${allowed.join(', ')}`)
                 );
             }
- 
+
             const typeOr = [];
             if (walletMatched.length) typeOr.push({ type: { $in: walletMatched } });
             sourceMatched.forEach((v) => {
@@ -518,71 +673,74 @@ exports.getTransactionHistory = async (req, res, next) => {
             });
             andConds.push({ $or: typeOr });
         }
- 
-        // ✅ All / Credit / Debit filter
+
+        // All / Credit / Debit filter
         if (flowFilter === 'debit') andConds.push({ type: { $in: DEBIT_TYPES } });
         else if (flowFilter === 'credit') andConds.push({ type: { $nin: DEBIT_TYPES } });
- 
+
         if (andConds.length) query.$and = andConds;
- 
+
         if (status) query.status = status;
         if (startDate || endDate) {
             query.createdAt = {};
             if (startDate) query.createdAt.$gte = new Date(startDate);
             if (endDate) query.createdAt.$lte = new Date(endDate);
         }
- 
-        // ✅ Search: description, ride ka pickup/drop address, ya amount
+
+        // Search: description, ride ka pickup/drop address, ya amount
         if (search) {
             const rx = new RegExp(escapeRegex(search), 'i');
- 
+
             const matchedRides = await Ride.find({
                 driver: req.driver._id,
                 $or: [{ pickupAddress: rx }, { endAddress: rx }],
             }).select('_id');
- 
+
             const or = [
                 { description: rx },
                 { rideId: { $in: matchedRides.map((r) => r._id) } },
             ];
- 
+
             const num = parseFloat(search);
             if (Number.isFinite(num)) {
                 const cents = Math.round(num * 100);
                 or.push({ amount: cents }, { netAmount: cents });
             }
- 
+
             query.$or = or;
         }
- 
+
         const [transactions, total] = await Promise.all([
             Wallet.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
-                .limit(parseInt(limit))
+                .limit(limit)
                 .populate('rideId', 'pickupAddress endAddress price')
                 .populate('bookingId', 'address price bookedFrom bookedTo')
                 .select('-__v'),
             Wallet.countDocuments(query),
         ]);
- 
-        const formattedTransactions = transactions.map(t => {
+
+        const formattedTransactions = transactions.map((t) => {
             const isDebit = DEBIT_TYPES.includes(t.type);
- 
+
             return {
                 ...t.toObject(),
-                walletType: t.type, // asli Wallet type (add / withdrawal / ...), agar app ko chahiye
+                walletType: t.type, // asli Wallet type (add / withdrawal / ...)
                 flow: isDebit ? 'debit' : 'credit',
- 
-                // ✅ App ke liye display type: credit -> "Received", debit -> "Withdraw"
+
+                // App ke liye display type: credit -> "Received", debit -> "Withdraw"
                 type: isDebit ? 'Withdraw' : 'Received',
- 
+
+                // withdrawal row: jitna driver ne maanga (jaise 100)
                 formattedAmount: t.amount / 100,
+                // withdrawal row: fee kat ke jo milega (99.75), baaki rows me null
                 formattedNetAmount: t.netAmount ? t.netAmount / 100 : null,
+                // withdrawal row: processing fee (0.25), baaki rows me null
                 formattedFee: t.processingFee ? t.processingFee / 100 : null,
             };
         });
- 
+
         // App ke type chips ke liye (dynamic): [{ key, label }]
         const availableTypes = [
             { key: 'all', label: 'All' },
@@ -591,7 +749,7 @@ exports.getTransactionHistory = async (req, res, next) => {
                 label: txLabel(v),
             })),
         ];
- 
+
         res.json({
             code: '1',
             message: req.t('success'),
@@ -599,7 +757,8 @@ exports.getTransactionHistory = async (req, res, next) => {
             availableTypes,
             transactions: formattedTransactions,
             pagination: {
-                currentPage: parseInt(page),
+                currentPage: page,
+                limit,
                 totalPages: Math.ceil(total / limit),
                 totalTransactions: total,
                 hasMore: skip + transactions.length < total,
@@ -609,9 +768,7 @@ exports.getTransactionHistory = async (req, res, next) => {
         console.error('Get transaction history error:', error);
         next(error);
     }
-};
-
- 
+}; 
  
 /**
  * Get Stripe Connect onboarding link
@@ -634,10 +791,46 @@ exports.getOnboardingLink = async (req, res, next) => {
 /**
  * Update Stripe Connect account status
  */
+// exports.updateAccountStatus = async (req, res, next) => {
+//     try {
+//         if (!req.driver.stripeConnectAccountId) {
+//             return next(createError.BadRequest('No Stripe account found'));
+//         }
+
+//         const { account, driver } = await withdrawalService.updateAccountStatus(
+//             req.driver.stripeConnectAccountId
+//         );
+
+//         res.json({
+//             code: '1',
+//             message: req.t('success'),
+//             accountStatus: {
+//                 detailsSubmitted: account.details_submitted,
+//                 payoutsEnabled: account.payouts_enabled,
+//                 chargesEnabled: account.charges_enabled,
+//                 onboardingCompleted: driver.stripeOnboardingCompleted,
+//             },
+//         });
+//     } catch (error) {
+//         console.error('Update account status error:', error);
+//         next(error);
+//     }
+// };
+
 exports.updateAccountStatus = async (req, res, next) => {
     try {
         if (!req.driver.stripeConnectAccountId) {
-            return next(createError.BadRequest('No Stripe account found'));
+            return res.json({
+                code: '1',
+                message: 'Stripe onboarding not started yet',
+                accountStatus: {
+                    hasAccount: false,
+                    detailsSubmitted: false,
+                    payoutsEnabled: false,
+                    chargesEnabled: false,
+                    onboardingCompleted: false,
+                },
+            });
         }
 
         const { account, driver } = await withdrawalService.updateAccountStatus(
@@ -648,6 +841,7 @@ exports.updateAccountStatus = async (req, res, next) => {
             code: '1',
             message: req.t('success'),
             accountStatus: {
+                hasAccount: true,
                 detailsSubmitted: account.details_submitted,
                 payoutsEnabled: account.payouts_enabled,
                 chargesEnabled: account.charges_enabled,
