@@ -664,7 +664,19 @@
 
 const { promisify } = require('util');
 const createError = require('http-errors');
-// const validator = require('validator');
+const validator = require('validator');
+
+const SupportMessage = require('../../models/supportMessageModel');
+const { normalizeSSN, hashSSN } = require('../../utils/ssn');
+const {
+    DOC_LABELS,
+    DOC_FIELD_MAP,
+    CONTACT_SUBJECTS,
+    isPersonalComplete,
+    getApplicationStatus,
+    buildApplicationInfo,
+    buildStatusScreen,
+} = require('../../utils/driverApplication');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const multilingual = require('../../utils/multilingual');
@@ -786,55 +798,46 @@ exports.verifyOTP = async (req, res, next) => {
         const { country_code, phone, otp } = req.body;
         const mobile = country_code + phone;
 
-        // verify otp
         const otpVerified = await OTP.findOne({ mobile, otp });
         if (!otpVerified) return next(createError.BadRequest('otp.fail'));
 
-        // if driver exists, login else send verifyToken
         let driver = await Driver.findOne({ phone })
             .select('-__v')
             .populate('city country');
 
-        if (driver) {
-            // if (!req.body.fcmToken)
-            //     return next(createError.BadRequest('fcmToken is required.'));
-
-            driver.isHandlingRequest = false;
-            driver.fcmToken = req.body.fcmToken;
-            await driver.save();
-            const token = await driver.generateAuthToken();
-
-            driver = multilingualUser(driver, req);
-
-            if (driver.location.coordinates) {
-                driver.latitude = driver.location.coordinates[1];
-                driver.longitude = driver.location.coordinates[0];
-            }
-
-            // Hide fields
-            driver.location = undefined;
-
+        // Is number se account nahi he: register karna padega (Personal Information screen)
+        if (!driver) {
             return res.json({
-                code: '1',
-                message: req.t('loggedIn'),
-                token,
-                driver,
+                code: '001',
+                message: req.t('otp.verified'),
+                country_code,
+                phone,
             });
         }
 
-        // generate verifyToken
-        const verifyToken = jwt.sign(
-            { country_code, phone },
-            process.env.JWT_SECRET,
-            { expiresIn: '1d' }
-        );
+        driver.isHandlingRequest = false;
+        driver.fcmToken = req.body.fcmToken;
+        await driver.save();
+        const token = await driver.generateAuthToken();
 
-        res.json({
-            code: '001',
-            message: req.t('otp.verified'),
-            verifyToken,
-            country_code,
-            phone,
+        // application status (doc se nikalo, conversion se pehle)
+        const application = buildApplicationInfo(driver);
+
+        driver = multilingualUser(driver, req);
+
+        if (driver.location?.coordinates) {
+            driver.latitude = driver.location.coordinates[1];
+            driver.longitude = driver.location.coordinates[0];
+        }
+
+        driver.location = undefined;
+        driver.application = application;
+
+        return res.json({
+            code: '1',
+            message: req.t('loggedIn'),
+            token,
+            driver,
         });
     } catch (error) {
         next(error);
@@ -863,7 +866,7 @@ exports.createProfile = async (req, res, next) => {
             city: cityDoc?.id,
             country: countryDoc?.id,
             address: req.body.address,
-            useFor: req.body.useFor,    
+            useFor: req.body.useFor,
             profile,
             fcmToken: req.body.fcmToken,
         });
@@ -913,8 +916,8 @@ exports.socialLogin = async (req, res, next) => {
                 const errorMessage = driver.facebookId
                     ? 'social.facebook'
                     : driver.appleId
-                    ? 'social.apple'
-                    : 'social.phone';
+                        ? 'social.apple'
+                        : 'social.phone';
                 return next(createError.BadRequest(errorMessage));
             }
             if (googleId !== driver.googleId) {
@@ -927,8 +930,8 @@ exports.socialLogin = async (req, res, next) => {
                 const errorMessage = driver.googleId
                     ? 'social.google'
                     : driver.appleId
-                    ? 'social.apple'
-                    : 'social.phone';
+                        ? 'social.apple'
+                        : 'social.phone';
                 return next(createError.BadRequest(errorMessage));
             }
             if (facebookId !== driver.facebookId) {
@@ -941,8 +944,8 @@ exports.socialLogin = async (req, res, next) => {
                 const errorMessage = driver.googleId
                     ? 'social.google'
                     : driver.facebookId
-                    ? 'social.facebook'
-                    : 'social.phone';
+                        ? 'social.facebook'
+                        : 'social.phone';
                 return next(createError.BadRequest(errorMessage));
             }
             if (appleId !== driver.appleId) {
@@ -1058,7 +1061,7 @@ const getDriverCategoryFromToken = async (req) => {
         return driver?.useFor || null;
     } catch (e) {
         return null;
-    }   
+    }
 };
 
 // GET /api/driver/get_vehicle_types?useFor=rental
@@ -1094,23 +1097,23 @@ exports.getVehicleTypes = async (req, res, next) => {
         const useFor =
             req.query.useFor || req.query.category || (await getDriverCategoryFromToken(req));
         const filter = {};
- 
+
         if (useFor) {
             const cat = await findActiveCategory(useFor);
             if (!cat) return next(createError.BadRequest('Invalid category.'));
             filter.typeFor = cat.typeFor;
         }
- 
+
         let types = await Type.find(filter).select('-__v -typeFor -distanceRate');
- 
+
         // Rental: admin ne abhi tak "Rental" vehicle type nahi banaya to Taxi types dikhao,
         // taaki screen khali na rahe.
         if (useFor && types.length === 0 && filter.typeFor === 'Rental') {
             types = await Type.find({ typeFor: 'Taxi' }).select('-__v -typeFor -distanceRate');
         }
- 
+
         types = types.map((type) => multilingual(type, req));
- 
+
         res.json({ code: '1', message: req.t('success'), data: { types } });
     } catch (error) {
         next(error);
@@ -1145,13 +1148,13 @@ exports.getVehicleTypes = async (req, res, next) => {
 //         next(error);
 //     }
 // };
- 
+
 exports.selectVehicleType = async (req, res, next) => {
     try {
         const type = await Type.findById(req.body.type);
         if (!type)
             return next(createError.BadRequest('Invalid vehicle type id.'));
- 
+
         // ✅ Category check
         const cat = await findActiveCategory(req.driver.useFor);
         if (cat) {
@@ -1162,30 +1165,30 @@ exports.selectVehicleType = async (req, res, next) => {
                     createError.BadRequest('This vehicle type is not available for your category.')
                 );
         }
- 
+
         let driver = await Driver.findByIdAndUpdate(
             req.driver.id,
             { type: req.body.type },
             { new: true }
         ).populate('city country');
- 
+
         driver = multilingualUser(driver, req);
- 
+
         if (driver.location.coordinates) {
             driver.latitude = driver.location.coordinates[1];
             driver.longitude = driver.location.coordinates[0];
         }
- 
+
         // Hide fields
         driver.location = undefined;
         driver.__v = undefined;
- 
+
         res.json({ code: '1', message: req.t('success'), driver });
     } catch (error) {
         next(error);
     }
 };
- 
+
 // ✅ "List your car as" screen — sets the driver's service category
 // (taxi / bike / rental / courier) as a dedicated step, separate from
 // create_profile. Called right after registration, before vehicle type
@@ -1499,6 +1502,324 @@ exports.biometricLogin = async (req, res, next) => {
             message: req.t('loggedIn'),
             token,
             driver,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+// ==================== APPLICATION FLOW (Figma screens) ====================
+
+// POST /api/driver/register   (Personal Information screen)
+// form-data: name, email, country_code, phone, address, ssn, fcmToken (optional)
+// files: licence_front, licence_back, profile (optional)
+exports.registerDriver = async (req, res, next) => {
+    const files = req.files || {};
+    const allFiles = Object.values(files).flat();
+    const url = name => (files[name]?.[0] ? `/uploads/${files[name][0].filename}` : undefined);
+
+    try {
+        const name = String(req.body.name || '').trim();
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const country_code = String(req.body.country_code || '').trim();
+        const phone = String(req.body.phone || '').replace(/\D/g, '');
+        const address = String(req.body.address || '').trim();
+
+        // ---------- Validation ----------
+        if (!name) return next(createError.BadRequest('Full name is required.'));
+        if (!email) return next(createError.BadRequest('Email address is required.'));
+        if (!validator.isEmail(email)) return next(createError.BadRequest('Invalid email address.'));
+        if (!country_code) return next(createError.BadRequest('Country code is required.'));
+        if (!phone) return next(createError.BadRequest('Phone number is required.'));
+        if (phone.length < 6 || phone.length > 15)
+            return next(createError.BadRequest('Invalid phone number.'));
+        if (!address) return next(createError.BadRequest('Address is required.'));
+
+        const licenceFront = url('licence_front');
+        const licenceBack = url('licence_back');
+        if (!licenceFront || !licenceBack) {
+            return next(createError.BadRequest('Driving license front and back images are required.'));
+        }
+
+        // SSN: validate + bcrypt hash (raw SSN kabhi save/return nahi hota)
+        const ssn = normalizeSSN(req.body.ssn);
+        const ssnHash = await hashSSN(ssn);
+
+        // ---------- Duplicate check ----------
+        const existing = await Driver.findOne({ $or: [{ phone }, { email }] }).select('phone email');
+        if (existing) {
+            const field = existing.phone === phone ? 'phone number' : 'email';
+            return next(createError.Conflict(`This ${field} is already registered. Please login instead.`));
+        }
+
+        // ---------- Create ----------
+        let driver = await Driver.create({
+            name,
+            email,
+            country_code,
+            phone,
+            address,
+            profile: url('profile'),
+            licence: licenceFront,
+            licenceBack,
+            ssnHash,
+            ssnLast4: ssn.slice(-4),
+            applicationStatus: 'incomplete', // vehicle info baaki he
+            fcmToken: req.body.fcmToken || undefined,
+        });
+
+        const token = await driver.generateAuthToken();
+
+        const application = buildApplicationInfo(driver);
+        driver = multilingualUser(driver, req);
+
+        driver.password = undefined;
+        driver.__v = undefined;
+        driver.location = undefined;
+        driver.ssnHash = undefined;
+        driver.application = application;
+
+        res.status(201).json({
+            code: '1',
+            message: req.t('profile'),
+            token, // aage ke har API ke header `token` me jayega
+            driver,
+        });
+    } catch (error) {
+        allFiles.forEach(f => deleteFile(f.path));
+
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyPattern || {})[0] || 'details';
+            return next(
+                createError.Conflict(`This ${field} is already registered. Please login instead.`)
+            );
+        }
+        next(error);
+    }
+};
+
+// POST /api/driver/vehicle_info   (Vehicle Information screen)
+// form-data: type (vehicle type id), plate_number, files: insurance, vehicle_photo
+exports.submitVehicleInfo = async (req, res, next) => {
+    // console.log('====== vehicle_info DEBUG ======');
+    // console.log('req.files:', req.files);
+    // console.log('req.body:', req.body);
+    // console.log('================================');
+    const files = req.files || {};
+    const allFiles = Object.values(files).flat();
+    const url = name => (files[name]?.[0] ? `/uploads/${files[name][0].filename}` : undefined);
+
+    try {
+        const current = req.driver;
+        const status = getApplicationStatus(current);
+
+        if (status === 'approved')
+            return next(createError.BadRequest('Your application is already approved.'));
+        if (status === 'rejected')
+            return next(createError.BadRequest('Your application was rejected. Please contact support.'));
+        if (status === 'resubmission_required')
+            return next(createError.BadRequest('Please use resubmit_document to update the requested documents.'));
+        if (!isPersonalComplete(current))
+            return next(createError.BadRequest('Please complete personal information first.'));
+
+        // Vehicle type
+        const type = await Type.findById(req.body.type);
+        if (!type) return next(createError.BadRequest('Invalid vehicle type id.'));
+
+        const cat = await findActiveCategory(current.useFor);
+        if (cat) {
+            const allowed = [cat.typeFor];
+            if (cat.typeFor === 'Rental') allowed.push('Taxi'); // Rental fallback (select_vehicle_type jaisa)
+            if (!allowed.includes(type.typeFor))
+                return next(createError.BadRequest('This vehicle type is not available for your category.'));
+        }
+
+        // Plate number
+        const plateNumber = String(req.body.plate_number || '').trim().toUpperCase();
+        if (!plateNumber) return next(createError.BadRequest('Vehicle license plate number is required.'));
+        if (!/^[A-Z0-9][A-Z0-9\- ]{1,14}$/.test(plateNumber))
+            return next(createError.BadRequest('Invalid plate number.'));
+
+        // Files: nayi bheji to wahi, warna pehle wali chalegi
+        const insurance = url('insurance') || current.insurance;
+        const vehiclePhoto = url('vehicle_photo') || current.vehiclePhoto;
+        if (!insurance) return next(createError.BadRequest('Vehicle insurance document is required.'));
+        if (!vehiclePhoto) return next(createError.BadRequest('Vehicle photo is required.'));
+
+        const update = {
+            type: type.id,
+            plateNumber,
+            insurance,
+            vehiclePhoto,
+            applicationStatus: 'under_review',
+        };
+        if (status !== 'under_review') update.applicationSubmittedAt = new Date();
+
+        let driver = await Driver.findByIdAndUpdate(current.id, update, { new: true }).populate(
+            'city country'
+        );
+
+        // Replace hui purani files hata do
+        if (url('insurance') && current.insurance) deleteFile(`public${current.insurance}`);
+        if (url('vehicle_photo') && current.vehiclePhoto) deleteFile(`public${current.vehiclePhoto}`);
+
+        const application = buildApplicationInfo(driver);
+        driver = multilingualUser(driver, req);
+
+        if (driver.location?.coordinates) {
+            driver.latitude = driver.location.coordinates[1];
+            driver.longitude = driver.location.coordinates[0];
+        }
+        driver.location = undefined;
+        driver.__v = undefined;
+        driver.application = application;
+
+        res.json({ code: '1', message: req.t('success'), driver });
+    } catch (error) {
+        allFiles.forEach(f => deleteFile(f.path));
+        if (error.name === 'CastError') return next(createError.BadRequest('Invalid vehicle type id.'));
+        next(error);
+    }
+};
+
+// GET /api/driver/application_status   (Application Status screen)
+exports.getApplicationStatus = async (req, res, next) => {
+    try {
+        const driver = req.driver;
+        const { steps, card } = buildStatusScreen(driver);
+
+        res.json({
+            code: '1',
+            message: req.t('success'),
+            data: {
+                ...buildApplicationInfo(driver),
+                steps,
+                card,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// POST /api/driver/resubmit_document   ("Resubmit Document" button)
+// files: licence_front, licence_back, insurance, vehicle_photo (sirf jo admin ne maange)
+exports.resubmitDocument = async (req, res, next) => {
+    const files = req.files || {};
+    const allFiles = Object.values(files).flat();
+
+    try {
+        const current = req.driver;
+
+        if (getApplicationStatus(current) !== 'resubmission_required') {
+            return next(createError.BadRequest('No document resubmission is requested for your application.'));
+        }
+
+        const requested = current.resubmission?.documents || [];
+        const provided = requested.filter(key => files[key]?.[0]);
+        const missing = requested.filter(key => !files[key]?.[0]);
+
+        if (missing.length) {
+            return next(
+                createError.BadRequest(`Please upload: ${missing.map(k => DOC_LABELS[k] || k).join(', ')}`)
+            );
+        }
+
+        const update = {
+            applicationStatus: 'under_review',
+            applicationSubmittedAt: new Date(),
+            $unset: { resubmission: 1 },
+        };
+        const oldFiles = [];
+
+        provided.forEach(key => {
+            const field = DOC_FIELD_MAP[key];
+            if (current[field]) oldFiles.push(current[field]);
+            update[field] = `/uploads/${files[key][0].filename}`;
+        });
+
+        // Jo documents maange nahi gaye unki upload hui files hata do
+        Object.keys(files).forEach(key => {
+            if (!requested.includes(key)) files[key].forEach(f => deleteFile(f.path));
+        });
+
+        let driver = await Driver.findByIdAndUpdate(current.id, update, { new: true }).populate(
+            'city country'
+        );
+
+        oldFiles.forEach(p => deleteFile(`public${p}`));
+
+        const application = buildApplicationInfo(driver);
+        driver = multilingualUser(driver, req);
+        driver.location = undefined;
+        driver.__v = undefined;
+        driver.application = application;
+
+        res.json({
+            code: '1',
+            message: req.t('success'),
+            // "Resubmission confirmation" popup
+            confirmation: {
+                title: 'Resubmission confirmation',
+                message:
+                    'Your application has been submitted successfully. Our team will review your details and notify you once a decision is made.',
+                buttonText: 'View Application Status',
+                action: 'application_status',
+            },
+            driver,
+        });
+    } catch (error) {
+        allFiles.forEach(f => deleteFile(f.path));
+        next(error);
+    }
+};
+
+// GET /api/driver/contact_subjects   (Subject dropdown)
+exports.getContactSubjects = async (req, res, next) => {
+    try {
+        res.json({ code: '1', message: req.t('success'), data: { subjects: CONTACT_SUBJECTS } });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// POST /api/driver/contact_us   (Contact Us screen)
+// body: name, subject, message, customSubject (subject = "Other" ho tab)
+exports.contactUs = async (req, res, next) => {
+    try {
+        const name = String(req.body.name || '').trim();
+        const subject = String(req.body.subject || '').trim();
+        const customSubject = String(req.body.customSubject || '').trim();
+        const message = String(req.body.message || '').trim();
+
+        if (!name) return next(createError.BadRequest('Name is required.'));
+        if (!subject) return next(createError.BadRequest('Subject is required.'));
+        if (!CONTACT_SUBJECTS.includes(subject))
+            return next(createError.BadRequest(`subject must be one of: ${CONTACT_SUBJECTS.join(', ')}`));
+        if (subject === 'Other' && !customSubject)
+            return next(createError.BadRequest('Please specify your subject.'));
+        if (!message) return next(createError.BadRequest('Message is required.'));
+        if (message.length > 2000)
+            return next(createError.BadRequest('Message is too long (max 2000 characters).'));
+
+        await SupportMessage.create({
+            driver: req.driver.id,
+            name,
+            subject,
+            customSubject: subject === 'Other' ? customSubject : undefined,
+            message,
+            applicationStatus: getApplicationStatus(req.driver),
+        });
+
+        res.json({
+            code: '1',
+            message: req.t('success'),
+            // "Message Submitted" popup
+            confirmation: {
+                title: 'Message Submitted',
+                message: "Our support team has received your message. We'll get back to you as soon as possible.",
+                buttonText: 'Back to application status',
+                action: 'application_status',
+            },
         });
     } catch (error) {
         next(error);

@@ -332,8 +332,27 @@ const driverSchema = new mongoose.Schema(
             default: '/img/avatar.png', // public/img/avatar.png
         },
         licence: String,
+        licenceBack: String,                              // licence = front, licenceBack = back
         pan: String,
         rc: String,
+
+        ssnHash: { type: String, select: false },
+        ssnLast4: String,
+        plateNumber: String,
+        insurance: String,
+        vehiclePhoto: String,
+        applicationStatus: {
+            type: String,
+            enum: ['incomplete', 'under_review', 'resubmission_required', 'approved', 'rejected'],
+        },
+        applicationSubmittedAt: Date,
+        rejectionReason: String,
+        resubmission: {
+            documents: [String],
+            reason: String,
+            requestedAt: Date,
+        },
+
         status: {
             type: String,
             enum: ['online', 'offline', 'busy'],
@@ -483,6 +502,7 @@ const driverSchema = new mongoose.Schema(
                 },
                 verifiedAt: Date,
                 rejectionReason: String,
+                
             },
         ],
 

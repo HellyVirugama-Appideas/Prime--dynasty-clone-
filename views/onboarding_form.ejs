@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<!-- BEGIN: Head-->
+
+<head>
+    <%- include('_layouts/head') %>
+    <title><%= isEdit ? 'Edit' : 'Add' %> Onboarding Screen | <%= title %></title>
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/Dropify/0.2.2/css/dropify.min.css">
+</head>
+<!-- END: Head-->
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <!-- BEGIN: Page Main-->
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0">
+                                <span><%= isEdit ? 'Edit' : 'Add' %> Onboarding Screen</span>
+                            </h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item"><a href="/admin/onboarding-screens">Onboarding Screens</a></li>
+                                <li class="breadcrumb-item active"><%= isEdit ? 'Edit' : 'Add' %></li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="">
+                <div class="container">
+                    <div class="section">
+                        <div class="row">
+                            <div class="col s12">
+                                <%- messages('messages', locals) %>
+                            </div>
+                        </div>
+
+                        <form method="POST"
+                            action="<%= isEdit ? '/admin/onboarding-screens/edit/' + screen._id : '/admin/onboarding-screens/add' %>"
+                            id="form"
+                            enctype="multipart/form-data"
+                            onsubmit="validate()">
+
+                            <div class="col s12">
+                                <div class="card">
+                                    <div class="card-content">
+                                        <div class="row">
+
+                                            <!-- Title -->
+                                            <div class="input-field col s12 m6">
+                                                <input id="title" name="title" type="text"
+                                                    value="<%= screen.title || '' %>" required>
+                                                <label for="title" class="<%= screen.title ? 'active' : '' %>">Title</label>
+                                            </div>
+
+                                            <!-- Order -->
+                                            <div class="input-field col s12 m6">
+                                                <input id="order" name="order" type="number" min="0"
+                                                    value="<%= screen.order != null ? screen.order : 0 %>">
+                                                <label for="order" class="active">Order</label>
+                                                <span class="helper-text">Chhota number pehle dikhega (1, 2, 3...)</span>
+                                            </div>
+
+                                            <!-- Description -->
+                                            <div class="input-field col s12">
+                                                <textarea id="description" name="description"
+                                                    class="materialize-textarea"><%= screen.description || '' %></textarea>
+                                                <label for="description" class="<%= screen.description ? 'active' : '' %>">Description</label>
+                                            </div>
+
+                                            <!-- Active Switch -->
+                                            <div class="col s12" style="margin-bottom: 20px;">
+                                                <div class="switch">
+                                                    <label>
+                                                        Inactive
+                                                        <input type="checkbox" name="isActive"
+                                                            <%= screen.isActive ? 'checked' : '' %>>
+                                                        <span class="lever"></span>
+                                                        Active
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <!-- Image Upload (Dropify) -->
+                                            <div class="input-field col s12">
+                                                Upload Image
+                                                <input type="file"
+                                                    accept="image/png, image/jpeg, image/jpg"
+                                                    name="image"
+                                                    id="input-file-now"
+                                                    class="dropify"
+                                                    data-disable-remove="true"
+                                                    <%= isEdit ? '' : 'required' %>
+                                                    <%= isEdit && screen.image ? 'data-default-file="' + screen.image + '"' : '' %> />
+                                                <small>
+                                                    <div id="error1" class="error" style="color: #e53935;"></div>
+                                                </small>
+                                                <% if (isEdit) { %>
+                                                    <span class="helper-text">Nayi image select karoge tabhi change hogi</span>
+                                                <% } %>
+                                            </div>
+
+                                            <!-- Buttons -->
+                                            <div class="col s12" style="margin-top: 15px;">
+                                                <button type="submit" class="btn purple" id="submitBtn">
+                                                    <%= isEdit ? 'Update' : 'Submit' %>
+                                                </button>
+                                                <a href="/admin/onboarding-screens" class="btn btn-danger ml-1">Cancel</a>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="content-overlay"></div>
+            </div>
+        </div>
+    </div>
+    <!-- END: Page Main-->
+
+    <script>
+        const formC = document.getElementById('form');
+
+        formC.addEventListener('submit', (e) => {
+            e.preventDefault();
+        });
+
+        function validate() {
+            let returnVal = true;
+            const fileInput = document.getElementById('input-file-now');
+            const fileValue = fileInput.value;
+
+            // Edit mode me image optional hai
+            const isEdit = <%= isEdit ? 'true' : 'false' %>;
+
+            if (fileValue) {
+                const ext = fileValue.substring(fileValue.lastIndexOf('.') + 1).toLowerCase();
+                if (ext === 'png' || ext === 'jpeg' || ext === 'jpg') {
+                    document.getElementById('error1').innerText = '';
+                } else {
+                    document.getElementById('error1').innerText = 'Wrong file type. Only PNG, JPG, JPEG allowed.';
+                    returnVal = false;
+                }
+            } else if (!isEdit) {
+                document.getElementById('error1').innerText = 'Image is required.';
+                returnVal = false;
+            }
+
+            if (returnVal) {
+                document.getElementById('submitBtn').disabled = true;
+                formC.submit();
+            }
+        }
+    </script>
+
+    <%- include('_layouts/commonJs') %>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Dropify/0.2.2/js/dropify.min.js"></script>
+    <script src="/app-assets/js/scripts/form-file-uploads.min.js"></script>
+</body>
+
+</html>

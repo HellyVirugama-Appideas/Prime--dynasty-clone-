@@ -23,7 +23,7 @@ const Reward = require('../models/Driverincentiverewardmodel');
 
 const envTz = process.env.INCENTIVE_TZ_OFFSET;
 const TZ = envTz !== undefined && envTz !== '' && Number.isFinite(Number(envTz)) ? Number(envTz) : 330;
-const CURRENCY = process.env.INCENTIVE_CURRENCY || '₹';
+const CURRENCY = process.env.INCENTIVE_CURRENCY || '$';
 const WEEK_START = 0; // 0 = Sunday (design: "Sun, 15 Feb To Sat, 21 Feb")
 const KM_PER_MI = 1.609344;
 

@@ -400,6 +400,7 @@ app.use('/api/driver', require('./routes/driver/Incentiveroutes.js'));
 
 app.use('/api', require('./routes/user/cityCountryRoutes'));
 app.use('/api', require('./routes/user/cmsRoutes'));
+app.use("/api/onboarding", require("./routes/onboardingRoutes.js"))
 
 // 404 api
 app.use('/api', (req, res, next) => {
@@ -426,6 +427,8 @@ app.use('/admin/', require('./routes/admin/offerRoutes'));
 app.use('/admin/', require('./routes/admin/cancelReasonRoutes.js'));
 app.use('/admin/', require('./routes/admin/declarationFormRoutes.js'));
 app.use('/admin/', require('./routes/admin/Incentiveroutes.js'));
+app.use("/admin/onboarding-screens", require("./routes/admin/onboardingScreenAdminRoutes.js"))
+
 
 // 404 admin
 app.all('/admin/*', (req, res) => {
