@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<!-- BEGIN: Head-->
+
+<head>
+    <%- include('_layouts/head') %>
+    <title>Application Details | <%= title %></title>
+    <style>
+        .status-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #fff;
+        }
+        .status-under_review { background: #ff9800; }
+        .status-resubmission_required { background: #ef6c00; }
+        .status-approved { background: #26a69a; }
+        .status-rejected { background: #e53935; }
+        .status-incomplete { background: #9e9e9e; }
+        .info-table td { padding: 8px 12px; vertical-align: top; }
+        .info-table td:first-child { color: #777; width: 40%; }
+        .info-table td:last-child { font-weight: 500; }
+        .doc-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            background: #fafafa;
+            height: 100%;
+        }
+        .doc-card.requested {
+            border-color: #ef6c00;
+            background: #fff8e1;
+        }
+        .doc-thumb {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: #eee;
+        }
+        .doc-empty, .doc-pdf {
+            height: 140px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            border: 2px dashed #ddd;
+        }
+        .doc-pdf {
+            background: #fdecea;
+            color: #e53935;
+            font-weight: 600;
+            border: none;
+        }
+        .action-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .note-box {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .note-warning { background: #fff8e1; border-left: 4px solid #ef6c00; }
+        .note-danger { background: #fdecea; border-left: 4px solid #e53935; }
+        .note-success { background: #e8f5e9; border-left: 4px solid #26a69a; }
+        .note-info { background: #e3f2fd; border-left: 4px solid #2196f3; }
+    </style>
+</head>
+<!-- END: Head-->
+
+<body class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+    <%
+        const statusLabels = {
+            under_review: 'Under Review',
+            resubmission_required: 'Resubmission Required',
+            approved: 'Approved',
+            rejected: 'Rejected',
+            incomplete: 'Incomplete'
+        };
+        const isPdf = (u) => /\.pdf$/i.test(u || '');
+        const typeName = (t) => {
+            if (!t) return '-';
+            const n = t.name;
+            if (n && typeof n === 'object') return n.en || Object.values(n)[0] || '-';
+            return n || '-';
+        };
+        const requestedDocs = (driver.resubmission && driver.resubmission.documents) || [];
+    %>
+
+    <!-- BEGIN: Page Main-->
+    <div id="main">
+        <div class="row">
+            <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                <div class="container">
+                    <div class="row">
+                        <div class="col s12 m6 l6">
+                            <h5 class="breadcrumbs-title mt-0 mb-0"><span>Application Details</span></h5>
+                        </div>
+                        <div class="col s12 m6 l6 right-align-md">
+                            <ol class="breadcrumbs mb-0">
+                                <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                <li class="breadcrumb-item"><a href="/admin/applications">Driver Applications</a></li>
+                                <li class="breadcrumb-item active"><%= driver.name %></li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col s12">
+                <div class="container">
+                    <div class="section">
+                        <%- messages('messages', locals) %>
+
+                        <!-- Header Card -->
+                        <div class="card">
+                            <div class="card-content">
+                                <div class="row mb-0">
+                                    <div class="col s12 m8">
+                                        <h5 class="mt-0 mb-1"><%= driver.name %></h5>
+                                        <p class="grey-text mb-0">
+                                            <%= driver.country_code %> <%= driver.phone %> &nbsp;•&nbsp; <%= driver.email %>
+                                        </p>
+                                    </div>
+                                    <div class="col s12 m4 right-align">
+                                        <span class="status-pill status-<%= appStatus %>">
+                                            <%= statusLabels[appStatus] || appStatus %>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Personal Information -->
+                            <div class="col s12 m6">
+                                <div class="card">
+                                    <div class="card-content">
+                                        <h6 class="mb-3"><i class="material-icons left">person</i>Personal Information</h6>
+                                        <table class="info-table">
+                                            <tr><td>Full Name</td><td><%= driver.name %></td></tr>
+                                            <tr><td>Email</td><td><%= driver.email %></td></tr>
+                                            <tr><td>Phone</td><td><%= driver.country_code %> <%= driver.phone %></td></tr>
+                                            <tr><td>Address</td><td><%= driver.address || '-' %></td></tr>
+                                            <tr><td>SSN</td><td><%= application.ssnMasked || '-' %></td></tr>
+                                            <tr><td>Registered</td><td><%= new Date(driver.createdAt).toLocaleString('en-IN') %></td></tr>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Vehicle Information -->
+                            <div class="col s12 m6">
+                                <div class="card">
+                                    <div class="card-content">
+                                        <h6 class="mb-3"><i class="material-icons left">directions_car</i>Vehicle Information</h6>
+                                        <table class="info-table">
+                                            <tr><td>Vehicle Type</td><td><%= typeName(driver.type) %></td></tr>
+                                            <tr><td>Plate Number</td><td><%= driver.plateNumber || '-' %></td></tr>
+                                            <tr><td>Category</td><td><%= driver.useFor || '-' %></td></tr>
+                                            <tr>
+                                                <td>Submitted</td>
+                                                <td>
+                                                    <%= driver.applicationSubmittedAt
+                                                        ? new Date(driver.applicationSubmittedAt).toLocaleString('en-IN')
+                                                        : '-' %>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Documents -->
+                        <div class="card">
+                            <div class="card-content">
+                                <h6 class="mb-1"><i class="material-icons left">folder_open</i>Documents</h6>
+                                <p class="grey-text" style="margin-bottom:18px;">
+                                    Tick the documents you want the driver to resubmit, then use the form below.
+                                </p>
+
+                                <div class="row">
+                                    <% documents.forEach(function(doc) { %>
+                                        <div class="col s12 m6 l3" style="margin-bottom:16px;">
+                                            <div class="doc-card <%= requestedDocs.includes(doc.key) ? 'requested' : '' %>">
+                                                <% if (!doc.url) { %>
+                                                    <div class="doc-empty">Not uploaded</div>
+                                                <% } else if (isPdf(doc.url)) { %>
+                                                    <div class="doc-pdf">PDF</div>
+                                                <% } else { %>
+                                                    <a href="<%= doc.url %>" target="_blank">
+                                                        <img class="doc-thumb" src="<%= doc.url %>" alt="<%= doc.label %>">
+                                                    </a>
+                                                <% } %>
+
+                                                <div style="margin-top:10px; font-weight:600;"><%= doc.label %></div>
+
+                                                <% if (doc.url) { %>
+                                                    <a href="<%= doc.url %>" target="_blank" class="purple-text" style="font-size:0.85rem;">
+                                                        Open full size
+                                                    </a>
+                                                <% } %>
+
+                                                <% if (doc.requestable && appStatus !== 'approved') { %>
+                                                    <div style="margin-top:10px;">
+                                                        <label>
+                                                            <input type="checkbox" name="documents" value="<%= doc.key %>"
+                                                                   form="resubmitForm"
+                                                                   <%= requestedDocs.includes(doc.key) ? 'checked' : '' %>>
+                                                            <span>Ask to resubmit</span>
+                                                        </label>
+                                                    </div>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    <% }) %>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Decision Actions -->
+                        <div class="card">
+                            <div class="card-content">
+                                <h6 class="mb-3"><i class="material-icons left">gavel</i>Decision</h6>
+
+                                <% if (appStatus === 'resubmission_required' && driver.resubmission) { %>
+                                    <div class="note-box note-warning">
+                                        <strong>Resubmission pending:</strong>
+                                        <%= requestedDocs.map(function(k) { return docLabels[k] || k; }).join(', ') %>
+                                        <% if (driver.resubmission.reason) { %>
+                                            <br>Reason: <%= driver.resubmission.reason %>
+                                        <% } %>
+                                    </div>
+                                <% } %>
+
+                                <% if (appStatus === 'rejected' && driver.rejectionReason) { %>
+                                    <div class="note-box note-danger">
+                                        <strong>Rejected:</strong> <%= driver.rejectionReason %>
+                                    </div>
+                                <% } %>
+
+                                <% if (appStatus === 'incomplete') { %>
+                                    <div class="note-box note-info">
+                                        Driver has not completed the application yet (Vehicle Information pending). Approve is disabled.
+                                    </div>
+                                <% } %>
+
+                                <% if (appStatus === 'approved') { %>
+                                    <div class="note-box note-success">
+                                        This driver is already approved.
+                                    </div>
+                                <% } %>
+
+                                <!-- Approve -->
+                                <% if (appStatus !== 'approved' && appStatus !== 'incomplete') { %>
+                                    <div class="action-section">
+                                        <form method="POST" action="/admin/applications/<%= driver._id %>/approve"
+                                              onsubmit="return confirm('Are you sure you want to approve this driver?');">
+                                            <button type="submit" class="btn waves-effect waves-light green">
+                                                <i class="material-icons left">check_circle</i>Approve Driver
+                                            </button>
+                                        </form>
+                                    </div>
+                                <% } %>
+
+                                <!-- Request Resubmission -->
+                                <% if (appStatus !== 'approved') { %>
+                                    <div class="action-section">
+                                        <h6 class="mb-2">Request Document Resubmission</h6>
+                                        <p class="grey-text" style="font-size:0.85rem;">
+                                            Selected documents above will be requested from the driver.
+                                        </p>
+                                        <form id="resubmitForm" method="POST"
+                                              action="/admin/applications/<%= driver._id %>/resubmit">
+                                            <div class="input-field">
+                                                <textarea id="resubmitReason" name="reason" class="materialize-textarea"></textarea>
+                                                <label for="resubmitReason">Reason / message for driver</label>
+                                            </div>
+                                            <button type="submit" class="btn waves-effect waves-light orange darken-2">
+                                                <i class="material-icons left">replay</i>Request Resubmission
+                                            </button>
+                                        </form>
+                                    </div>
+                                <% } %>
+
+                                <!-- Reject -->
+                                <% if (appStatus !== 'approved' && appStatus !== 'rejected') { %>
+                                    <div class="action-section">
+                                        <h6 class="mb-2">Reject Application</h6>
+                                        <form method="POST" action="/admin/applications/<%= driver._id %>/reject"
+                                              onsubmit="return confirm('Are you sure you want to reject this application?');">
+                                            <div class="input-field">
+                                                <textarea id="rejectReason" name="reason" class="materialize-textarea" required></textarea>
+                                                <label for="rejectReason">Rejection reason (required)</label>
+                                            </div>
+                                            <button type="submit" class="btn waves-effect waves-light red">
+                                                <i class="material-icons left">cancel</i>Reject
+                                            </button>
+                                        </form>
+                                    </div>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <!-- Support Messages -->
+                        <div class="card">
+                            <div class="card-content">
+                                <div class="row mb-0">
+                                    <div class="col s8">
+                                        <h6 class="mb-0"><i class="material-icons left">chat</i>Recent Support Messages</h6>
+                                    </div>
+                                    <div class="col s4 right-align">
+                                        <a href="/admin/support-messages" class="btn-flat purple-text">View all</a>
+                                    </div>
+                                </div>
+
+                                <% if (!supportMessages || !supportMessages.length) { %>
+                                    <p class="grey-text" style="margin-top:15px;">No messages from this driver yet.</p>
+                                <% } else { %>
+                                    <ul class="collection" style="margin-top:15px; border:none;">
+                                        <% supportMessages.forEach(function(m) { %>
+                                            <li class="collection-item" style="padding-left:0; padding-right:0;">
+                                                <strong>
+                                                    <%= m.subject === 'Other' && m.customSubject ? m.customSubject : m.subject %>
+                                                </strong>
+                                                <span class="grey-text" style="font-size:0.8rem;">
+                                                    &nbsp;• <%= new Date(m.createdAt).toLocaleString('en-IN') %>
+                                                    &nbsp;• <%= m.status %>
+                                                </span>
+                                                <p style="margin:6px 0 0;"><%= m.message %></p>
+                                            </li>
+                                        <% }) %>
+                                    </ul>
+                                <% } %>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="content-overlay"></div>
+            </div>
+        </div>
+    </div>
+    <!-- END: Page Main-->
+
+    <%- include('_layouts/commonJs') %>
+</body>
+</html>

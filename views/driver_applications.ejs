@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+<!-- BEGIN: Head-->
+
+<head>
+    <%- include('_layouts/head') %>
+        <title>Driver Applications | <%= title %>
+        </title>
+        <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/jquery.dataTables.min.css">
+        <link rel="stylesheet" type="text/css"
+            href="/app-assets/vendors/data-tables/extensions/responsive/css/responsive.dataTables.min.css">
+        <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/select.dataTables.min.css">
+        <link rel="stylesheet" type="text/css" href="/app-assets/css/pages/data-tables.css">
+        <style>
+            .status-pill {
+                display: inline-block;
+                padding: 3px 10px;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #fff;
+            }
+
+            .status-under_review {
+                background: #ff9800;
+            }
+
+            .status-resubmission_required {
+                background: #ef6c00;
+            }
+
+            .status-approved {
+                background: #26a69a;
+            }
+
+            .status-rejected {
+                background: #e53935;
+            }
+
+            .status-incomplete {
+                background: #9e9e9e;
+            }
+
+            .filter-tabs {
+                margin-bottom: 15px;
+            }
+
+            .filter-tabs a {
+                display: inline-block;
+                padding: 6px 14px;
+                margin: 0 4px 6px 0;
+                border-radius: 16px;
+                background: #f3e5f5;
+                color: #6a1b9a;
+                font-size: 0.85rem;
+                font-weight: 600;
+            }
+
+            .filter-tabs a.active {
+                background: #7c4dff;
+                color: #fff;
+            }
+        </style>
+</head>
+<!-- END: Head-->
+
+<body
+    class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+        <% const labels={ under_review: 'Under Review' , resubmission_required: 'Resubmission' , approved: 'Approved' ,
+            rejected: 'Rejected' , incomplete: 'Incomplete' }; const tabLabels={ all: 'All' ,
+            under_review: 'Under Review' , resubmission_required: 'Resubmission' , approved: 'Approved' ,
+            rejected: 'Rejected' , incomplete: 'Incomplete' }; const qs=(o)=> {
+            const params = Object.assign({ status: status, search: search }, o);
+            return '?' + Object.entries(params)
+            .filter(([k, v]) => v !== '' && v !== undefined && v !== null)
+            .map(([k, v]) => k + '=' + encodeURIComponent(v))
+            .join('&');
+            };
+            %>
+
+            <!-- BEGIN: Page Main-->
+            <div id="main">
+                <div class="row">
+                    <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                        <div class="container">
+                            <div class="row">
+                                <div class="col s12 m6 l6">
+                                    <h5 class="breadcrumbs-title mt-0 mb-0"><span>Driver Applications</span></h5>
+                                </div>
+                                <div class="col s12 m6 l6 right-align-md">
+                                    <ol class="breadcrumbs mb-0">
+                                        <li class="breadcrumb-item"><a href="/admin">Home</a></li>
+                                        <li class="breadcrumb-item active">Driver Applications</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col s12">
+                        <div class="container">
+                            <div class="section section-data-tables">
+                                <div class="row">
+                                    <div class="col s12">
+                                        <div class="card">
+                                            <div class="card-content">
+                                                <%- messages('messages', locals) %>
+
+                                                    <!-- Status Tabs -->
+                                                    <div class="filter-tabs">
+                                                        <% ['under_review', 'resubmission_required' , 'incomplete'
+                                                            , 'approved' , 'rejected' , 'all' ].forEach(function(t) { %>
+                                                            <a class="<%= status === t ? 'active' : '' %>"
+                                                                style="color: <%= status === t ? '#fff' : 'gray' %>;"
+                                                                href="/admin/applications<%= qs({ status: t, page: '' }) %>">
+                                                                <%= tabLabels[t] %> (<%= counts[t] || 0 %>)
+                                                            </a>
+                                                            <% }) %>
+                                                    </div>
+
+                                                    <!-- Search -->
+
+
+                                                    <div class="row">
+                                                        <div class="col s12 overflow">
+                                                            <% if (!drivers.length) { %>
+                                                                <p class="center-align grey-text"
+                                                                    style="padding:40px 0;">
+                                                                    No applications found for this filter.
+                                                                </p>
+                                                                <% } else { %>
+                                                                    <table id="page-length-option" class="display">
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th>Sr</th>
+                                                                                <th>Driver</th>
+                                                                                <th>Phone</th>
+                                                                                <th>Vehicle</th>
+                                                                                <th>Status</th>
+                                                                                <th>Updated</th>
+                                                                                <th>Action</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            <% drivers.forEach(function(d, i) { %>
+                                                                                <tr>
+                                                                                    <td>
+                                                                                        <%= i + 1 %>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <strong>
+                                                                                            <%= d.name %>
+                                                                                        </strong>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <%= d.country_code %>
+                                                                                            <%= d.phone %>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <%= d.plateNumber || '-' %>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <span
+                                                                                            class="status-pill status-<%= d.appStatus %>"
+                                                                                            style="padding: 15px 10px;">
+                                                                                            <%= labels[d.appStatus] ||
+                                                                                                d.appStatus %>
+                                                                                        </span>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <small>
+                                                                                            <%= new
+                                                                                                Date(d.updatedAt).toLocaleString('en-IN')
+                                                                                                %>
+                                                                                        </small>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <a href="/admin/applications/<%= d._id %>"
+                                                                                            title="View">
+                                                                                            <i
+                                                                                                class="material-icons">visibility</i>
+                                                                                        </a>
+                                                                                    </td>
+                                                                                </tr>
+                                                                                <% }) %>
+                                                                        </tbody>
+                                                                    </table>
+
+                                                                    <% if (totalPages> 1) { %>
+                                                                        <div class="center-align"
+                                                                            style="margin-top:20px;">
+                                                                            <% if (page> 1) { %>
+                                                                                <a href="/admin/applications<%= qs({ page: page - 1 }) %>"
+                                                                                    class="btn-flat">« Prev</a>
+                                                                                <% } %>
+                                                                                    <span class="grey-text">Page <%=
+                                                                                            page %> of <%= totalPages %>
+                                                                                    </span>
+                                                                                    <% if (page < totalPages) { %>
+                                                                                        <a href="/admin/applications<%= qs({ page: page + 1 }) %>"
+                                                                                            class="btn-flat">Next »</a>
+                                                                                        <% } %>
+                                                                        </div>
+                                                                        <% } %>
+                                                                            <% } %>
+                                                        </div>
+                                                    </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="content-overlay"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- END: Page Main-->
+
+            <%- include('_layouts/commonJs') %>
+                <script src="/app-assets/vendors/data-tables/js/jquery.dataTables.min.js"></script>
+                <script src="/app-assets/js/scripts/data-tables.js"></script>
+</body>
+
+</html>

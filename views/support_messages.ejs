@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html class="loading" lang="en" data-textdirection="ltr">
+
+<head>
+    <%- include('_layouts/head') %>
+
+        <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/jquery.dataTables.min.css">
+        <link rel="stylesheet" type="text/css"
+            href="/app-assets/vendors/data-tables/extensions/responsive/css/responsive.dataTables.min.css">
+        <link rel="stylesheet" type="text/css" href="/app-assets/vendors/data-tables/css/select.dataTables.min.css">
+        <link rel="stylesheet" type="text/css" href="/app-assets/css/pages/data-tables.css">
+
+        <title>Support Messages | <%= title %>
+        </title>
+
+        <style>
+            .filter-tabs {
+                margin-bottom: 15px;
+            }
+
+            .filter-tabs a {
+                display: inline-block;
+                padding: 6px 14px;
+                margin: 0 4px 6px 0;
+                border-radius: 16px;
+                background: #f3e5f5;
+                color: gray;
+                font-size: 0.85rem;
+                font-weight: 600;
+            }
+
+            .filter-tabs a.active {
+                background: #7c4dff;
+                color: #fff;
+            }
+
+            .status-pill {
+                display: inline-block;
+                padding: 8px 12px;
+                border-radius: 12px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: #fff;
+                white-space: nowrap;
+            }
+
+            .status-open {
+                background: #ff9800;
+            }
+
+            .status-resolved {
+                background: #26a69a;
+            }
+
+            .status-under_review {
+                background: #ff9800;
+            }
+
+            .status-resubmission_required {
+                background: #ef6c00;
+            }
+
+            .status-approved {
+                background: #26a69a;
+            }
+
+            .status-rejected {
+                background: #e53935;
+            }
+
+            .status-incomplete {
+                background: #9e9e9e;
+            }
+
+            .msg-text {
+                max-width: 420px;
+                white-space: pre-wrap;
+                color: #555;
+            }
+
+            .sub {
+                color: #888;
+                font-size: .82rem;
+            }
+
+            .filter-row {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                flex-wrap: wrap;
+                margin-bottom: 15px;
+            }
+
+            .filter-row input,
+            .filter-row select {
+                margin: 0 !important;
+            }
+
+            .filter-row select {
+                display: block;
+                width: auto;
+                min-width: 200px;
+            }
+
+            .empty-box {
+                text-align: center;
+                padding: 40px 0;
+                color: #999;
+            }
+        </style>
+</head>
+
+<body
+    class="vertical-layout page-header-light vertical-menu-collapsible vertical-dark-menu preload-transitions 2-columns"
+    data-open="click" data-menu="vertical-dark-menu" data-col="2-columns">
+
+    <%- include('_layouts/sidenavbar') %>
+
+        <% const statusText={ under_review: 'Under Review' , resubmission_required: 'Resubmission' ,
+            approved: 'Approved' , rejected: 'Rejected' , incomplete: 'Incomplete' }; const qs=(o)=> '?' +
+            Object.entries(
+            Object.assign({
+            status: status,
+            subject: subject,
+            search: search
+            }, o)
+            )
+            .filter(([k, v]) => v !== '' && v !== undefined && v !== null)
+            .map(([k, v]) => k + '=' + encodeURIComponent(v))
+            .join('&');
+            %>
+
+            <div id="main">
+                <div class="row">
+
+                    <!-- Breadcrumbs -->
+                    <div id="breadcrumbs-wrapper" data-image="/app-assets/images/gallery/breadcrumb-bg.jpg">
+                        <div class="container">
+                            <div class="row">
+
+                                <div class="col s12 m6 l6">
+                                    <h5 class="breadcrumbs-title mt-0 mb-0">
+                                        <span>Support Messages</span>
+                                    </h5>
+                                </div>
+
+                                <div class="col s12 m6 l6 right-align-md">
+                                    <ol class="breadcrumbs mb-0">
+                                        <li class="breadcrumb-item">
+                                            <a href="/admin">Home</a>
+                                        </li>
+                                        <li class="breadcrumb-item active">
+                                            Support Messages
+                                        </li>
+                                    </ol>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Content -->
+                    <div class="col s12">
+                        <div class="container">
+                            <div class="section section-data-tables">
+
+                                <div class="row">
+                                    <div class="col s12">
+
+                                        <div class="card">
+                                            <div class="card-content">
+
+                                                <%- messages('messages', locals) %>
+
+                                                    <!-- Status Tabs -->
+                                                    <div class="filter-tabs">
+
+                                                        <a class="<%= status === 'all' ? 'active' : '' %>"
+                                                            style="color: <%= status === 'all' ? '#fff' : 'gray' %>;"
+                                                            href="/admin/support-messages<%= qs({ status: 'all', page: '' }) %>">
+                                                            All (<%= counts.all || 0 %>)
+                                                        </a>
+
+                                                        <a class="<%= status === 'open' ? 'active' : '' %>"
+                                                            style="color: <%= status === 'open' ? '#fff' : 'gray' %>;"
+                                                            href="/admin/support-messages<%= qs({ status: 'open', page: '' }) %>">
+                                                            Open (<%= counts.open || 0 %>)
+                                                        </a>
+
+                                                        <a class="<%= status === 'resolved' ? 'active' : '' %>"
+                                                            style="color: <%= status === 'resolved' ? '#fff' : 'gray' %>;"
+                                                            href="/admin/support-messages<%= qs({ status: 'resolved', page: '' }) %>">
+                                                            Resolved (<%= counts.resolved || 0 %>)
+                                                        </a>
+
+                                                    </div>
+
+
+                                                    <!-- Support Messages Table -->
+                                                    <div class="row">
+                                                        <div class="col s12 overflow">
+
+                                                            <% if (!supportMessages.length) { %>
+
+                                                                <div class="empty-box">
+                                                                    <i class="material-icons"
+                                                                        style="font-size:48px;">chat_bubble_outline</i>
+                                                                    <p>No support messages found.</p>
+                                                                </div>
+
+                                                                <% } else { %>
+
+                                                                    <table id="page-length-option" class="display">
+
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th>Sr</th>
+                                                                                <th>Driver</th>
+                                                                                <th>Subject</th>
+                                                                                <th>Message</th>
+                                                                                <th>Application</th>
+                                                                                <th>Date</th>
+                                                                                <th>Status</th>
+                                                                                <th>Action</th>
+                                                                            </tr>
+                                                                        </thead>
+
+                                                                        <tbody>
+
+                                                                            <% supportMessages.forEach(function(m, i) {
+                                                                                %>
+
+                                                                                <tr>
+
+                                                                                    <!-- Driver -->
+                                                                                    <td>
+                                                                                        <%= i + 1 %>
+                                                                                    </td>
+
+                                                                                    <td>
+                                                                                        <% if (m.driver) { %>
+
+                                                                                            <a href="/admin/applications/<%= m.driver._id %>"
+                                                                                                style="font-weight:600; ">
+                                                                                                <%= m.name %>
+                                                                                            </a>
+
+                                                                                            <% } else { %>
+
+                                                                                                <strong>
+                                                                                                    <%= m.name %>
+                                                                                                </strong>
+                                                                                                <br>
+                                                                                                <span class="sub">Driver
+                                                                                                    deleted</span>
+
+                                                                                                <% } %>
+                                                                                    </td>
+
+                                                                                    <!-- Subject -->
+                                                                                    <td>
+                                                                                        <%= m.subject==='Other' &&
+                                                                                            m.customSubject ?
+                                                                                            m.customSubject : m.subject
+                                                                                            %>
+                                                                                    </td>
+
+                                                                                    <!-- Message -->
+                                                                                    <td class="msg-text">
+                                                                                        <%= m.message %>
+                                                                                    </td>
+
+                                                                                    <!-- Application Status -->
+                                                                                    <td>
+                                                                                        <% if (m.driverStatus) { %>
+
+                                                                                            <span
+                                                                                                class="status-pill status-<%= m.driverStatus %>"  style="padding: 15px 10px;">
+                                                                                                <%= statusText[m.driverStatus]
+                                                                                                    || m.driverStatus %>
+                                                                                            </span>
+
+                                                                                            <% } else { %>
+                                                                                                -
+                                                                                                <% } %>
+                                                                                    </td>
+
+                                                                                    <!-- Date -->
+                                                                                    <td>
+                                                                                        <small>
+                                                                                            <%= new
+                                                                                                Date(m.createdAt).toLocaleString('en-IN')
+                                                                                                %>
+                                                                                        </small>
+                                                                                    </td>
+
+                                                                                    <!-- Message Status -->
+                                                                                    <td>
+                                                                                        <span
+                                                                                            class="status-pill status-<%= m.status %>"  style="padding: 15px 10px;">
+                                                                                            <%= m.status %>
+                                                                                        </span>
+                                                                                    </td>
+
+                                                                                    <!-- Action -->
+                                                                                    <td>
+                                                                                        <form method="POST"
+                                                                                            action="/admin/support-messages/<%= m._id %>/toggle">
+
+                                                                                            <button type="submit"
+                                                                                                class="btn-small"
+                                                                                                style="background:<%= m.status === 'open' ? '#26a69a' : '#9e9e9e' %>;">
+                                                                                                <%= m.status==='open'
+                                                                                                    ? 'Mark Resolved'
+                                                                                                    : 'Reopen' %>
+                                                                                            </button>
+
+                                                                                        </form>
+                                                                                    </td>
+
+                                                                                </tr>
+
+                                                                                <% }) %>
+
+                                                                        </tbody>
+
+                                                                    </table>
+
+                                                                    <!-- Server-side Pagination -->
+                                                                    <% if (totalPages> 1) { %>
+
+                                                                        <div class="center-align"
+                                                                            style="margin-top:20px;">
+
+                                                                            <% if (page> 1) { %>
+
+                                                                                <a href="/admin/support-messages<%= qs({ page: page - 1 }) %>"
+                                                                                    class="btn-flat">
+                                                                                    « Prev
+                                                                                </a>
+
+                                                                                <% } %>
+
+                                                                                    <span class="grey-text">
+                                                                                        Page <%= page %> of <%=
+                                                                                                totalPages %>
+                                                                                    </span>
+
+                                                                                    <% if (page < totalPages) { %>
+
+                                                                                        <a href="/admin/support-messages<%= qs({ page: page + 1 }) %>"
+                                                                                            class="btn-flat">
+                                                                                            Next »
+                                                                                        </a>
+
+                                                                                        <% } %>
+
+                                                                        </div>
+
+                                                                        <% } %>
+
+                                                                            <% } %>
+
+                                                        </div>
+                                                    </div>
+
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div class="content-overlay"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <%- include('_layouts/commonJs') %>
+
+                <script src="/app-assets/vendors/data-tables/js/jquery.dataTables.min.js"></script>
+                <script src="/app-assets/js/scripts/data-tables.js"></script>
+
+</body>
+
+</html>

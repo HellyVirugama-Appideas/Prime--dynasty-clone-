@@ -182,6 +182,28 @@
                                                 Management</span>
                                         </a>
                                     </li>
+                                    <li class="bold <%= url.startsWith('/admin/applications') ? 'active' : '' %>">
+                                        <a class="waves-effect waves-cyan"
+                                            href="/admin/applications?status=under_review">
+                                            <i
+                                                class="material-icons <%= url.startsWith('/admin/applications') ? 'theme-text' : 'black-text' %>">assignment_ind</i>
+                                            <span
+                                                class="menu-title <%= url.startsWith('/admin/applications') ? 'theme-text' : 'black-text' %>">Driver
+                                                Applications</span>
+                                        </a>
+                                    </li>
+
+                                    <li class="bold <%= url.startsWith('/admin/support-messages') ? 'active' : '' %>">
+                                        <a class="waves-effect waves-cyan" href="/admin/support-messages?status=open">
+                                            <i
+                                                class="material-icons <%= url.startsWith('/admin/support-messages') ? 'theme-text' : 'black-text' %>">message</i>
+
+                                            <span
+                                                class="menu-title <%= url.startsWith('/admin/support-messages') ? 'theme-text' : 'black-text' %>">
+                                                Support Messages
+                                            </span>
+                                        </a>
+                                    </li>
 
                                     <li
                                         class="bold <%= url.startsWith('/admin/rides') || url.startsWith('/admin/bookings') ? 'active' : '' %>">

@@ -428,6 +428,8 @@ app.use('/admin/', require('./routes/admin/cancelReasonRoutes.js'));
 app.use('/admin/', require('./routes/admin/declarationFormRoutes.js'));
 app.use('/admin/', require('./routes/admin/Incentiveroutes.js'));
 app.use("/admin/onboarding-screens", require("./routes/admin/onboardingScreenAdminRoutes.js"))
+app.use('/admin/applications', require("./routes/admin/driverApplicationRoutes.js"));
+app.use('/admin/support-messages', require("./routes/admin/supportMessageRoutes.js"));
 
 
 // 404 admin
