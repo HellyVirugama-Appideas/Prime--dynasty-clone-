@@ -1028,7 +1028,6 @@ exports.verifyOTP = async (req, res, next) => {
         next(error);
     }
 };
-
 // POST /api/user/enter_details   ("Enter your details" screen)
 // header: token (verify_otp se mila verifyToken)
 // body: name (required), email (optional), fcmToken (optional)
@@ -1128,7 +1127,18 @@ exports.enterDetails = async (req, res, next) => {
         });
     } catch (error) {
         if (error.code === 11000) {
+            console.error('[enter_details] duplicate key:', error.keyValue);
+
             const field = Object.keys(error.keyPattern || {})[0] || 'details';
+
+            // User ne email diya hi nahi aur phir bhi email duplicate aaya: ye DB index ki dikkat he
+            if (field === 'email' && !req.body.email) {
+                return next(
+                    createError.InternalServerError(
+                        'Server index issue on email. Please run the email index fix script.'
+                    )
+                );
+            }
             return next(createError.Conflict(`This ${field} is already registered.`));
         }
         next(error);

@@ -24,17 +24,15 @@ const userSchema = new mongoose.Schema({
     //     // validate: [validator.isEmail, 'validation.emailInvalid'],
     // },
 
-    email: {
-        type: String,
-        lowercase: true,
-        trim: true,
-        unique: true,
-        sparse: true,   // email na dene wale users me duplicate error nahi aayega
-        validate: {
-            validator: v => !v || validator.isEmail(v),
-            message: 'validation.emailInvalid',
-        },
+email: {
+    type: String,
+    lowercase: true,
+    trim: true,
+    validate: {
+        validator: v => !v || validator.isEmail(v),
+        message: 'validation.emailInvalid',
     },
+},
     googleId: String,
     facebookId: String,
     appleId: String,
