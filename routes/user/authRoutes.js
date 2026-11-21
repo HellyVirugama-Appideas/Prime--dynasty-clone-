@@ -9,6 +9,8 @@ router.post('/send_otp', fileUpload(), authController.sendOTP);
 
 router.post('/verify_otp', fileUpload(), authController.verifyOTP);
 
+router.post('/enter_details', fileUpload(), authController.enterDetails);
+
 router.post(
     '/create_profile',
     upload.fields([

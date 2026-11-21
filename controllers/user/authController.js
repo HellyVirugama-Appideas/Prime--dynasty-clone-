@@ -850,7 +850,7 @@
 const { promisify } = require('util');
 const { generateUniqueReferralCode } = require('../../utils/Referralcode');
 const createError = require('http-errors');
-// const validator = require('validator');
+const validator = require('validator');
 const jwt = require('jsonwebtoken');
 const multilingualUser = require('../../utils/multilingualUser');
 const generateCode = require('../../utils/generateCode');
@@ -863,6 +863,7 @@ const Address = require('../../models/addressModel');
 const City = require('../../models/cityModel');
 const Country = require('../../models/countryModel');
 const { sendOTP } = require("../../utils/sendSMS")
+
 
 exports.checkUser = async (req, res, next) => {
     try {
@@ -929,43 +930,47 @@ exports.sendOTP = async (req, res, next) => {
     }
 };
 
-// exports.sendOTP = async (req, res, next) => {
+// exports.verifyOTP = async (req, res, next) => {
 //     try {
-//         const { country_code, phone } = req.body;
+//         const { country_code, phone, otp } = req.body;
+//         const mobile = normalizeMobile(country_code, phone);
 
-//         if (!country_code)
-//             return next(createError.BadRequest('validation.country_code'));
-//         if (!phone) 
-//             return next(createError.BadRequest('validation.phone'));
+//         // verify otp
+//         const otpVerified = await OTP.findOne({ mobile, otp: String(otp || '').trim() });
+//         if (!otpVerified) return next(createError.BadRequest('otp.fail'));
 
-//         const mobile = country_code + phone;
-
-//         // Generate and save OTP
-//         const otp = generateCode(4);
-//         await OTP.updateOne(
-//             { mobile },
-//             { otp, expireAt: Date.now() + 2 * 60 * 1000 },
-//             { upsert: true }
-//         );
-
-//         // Send OTP via SMS provider (Twilio)
-//         try {
-//             await sendOTP(mobile, otp);
-//         } catch (smsError) {
-//             console.error('SMS Provider Error:', smsError);
-//             // OTP is saved in DB, but SMS failed
-//             return next(createError.InternalServerError('otp.sendFailed'));
+//         // if userExists, login else send verifyToken
+//         // (admin ne country code "+91" se user banaya ho aur app "91" bheje — dono match honge)
+//         const ccDigits = String(country_code || '').replace(/\D/g, '');
+//         const userExists = await User.findOne({
+//             country_code: { $in: [country_code, ccDigits, '+' + ccDigits] },
+//             phone: String(phone || '').trim(),
+//         }).select('-__v');
+//         if (userExists) {
+//             userExists.fcmToken = req.body.fcmToken;
+//             await userExists.save();
+//             const token = await userExists.generateAuthToken();
+//             return res.json({
+//                 code: '1',
+//                 message: req.t('loggedIn'),
+//                 token,
+//                 user: userExists,
+//             });
 //         }
 
+//         // generate verifyToken
+//         const verifyToken = jwt.sign(
+//             { country_code, phone },
+//             process.env.JWT_SECRET,
+//             { expiresIn: '1d' }
+//         );
+
 //         res.json({
-//             code: '1',
-//             message: req.t('otp.sent'),
-//             result: {
-//                 country_code,
-//                 phone,
-//                 // Only include OTP in development/testing
-//                 ...(process.env.NODE_ENV !== 'production' && { otp })
-//             },
+//             code: '001',
+//             message: req.t('otp.verified'),
+//             verifyToken,
+//             country_code,
+//             phone,
 //         });
 //     } catch (error) {
 //         next(error);
@@ -974,23 +979,28 @@ exports.sendOTP = async (req, res, next) => {
 
 exports.verifyOTP = async (req, res, next) => {
     try {
-        const { country_code, phone, otp } = req.body;
+        const { country_code, phone } = req.body;
         const mobile = normalizeMobile(country_code, phone);
 
         // verify otp
-        const otpVerified = await OTP.findOne({ mobile, otp: String(otp || '').trim() });
+        const otpVerified = await OTP.findOne({ mobile, otp: String(req.body.otp || '').trim() });
         if (!otpVerified) return next(createError.BadRequest('otp.fail'));
 
-        // if userExists, login else send verifyToken
-        // (admin ne country code "+91" se user banaya ho aur app "91" bheje — dono match honge)
+        // (admin ne country code "+91" se user banaya ho aur app "91" bheje, dono match honge)
         const ccDigits = String(country_code || '').replace(/\D/g, '');
         const userExists = await User.findOne({
             country_code: { $in: [country_code, ccDigits, '+' + ccDigits] },
             phone: String(phone || '').trim(),
         }).select('-__v');
+
+        // Purana user: seedha login
         if (userExists) {
-            userExists.fcmToken = req.body.fcmToken;
+            if (userExists.blocked) return next(createError.Unauthorized('auth.blocked'));
+            if (userExists.isDeleted) return next(createError.Unauthorized('auth.deleted'));
+
+            if (req.body.fcmToken) userExists.fcmToken = req.body.fcmToken;
             await userExists.save();
+
             const token = await userExists.generateAuthToken();
             return res.json({
                 code: '1',
@@ -1000,7 +1010,7 @@ exports.verifyOTP = async (req, res, next) => {
             });
         }
 
-        // generate verifyToken
+        // Naya number: "Enter your details" screen par bhejo
         const verifyToken = jwt.sign(
             { country_code, phone },
             process.env.JWT_SECRET,
@@ -1019,91 +1029,111 @@ exports.verifyOTP = async (req, res, next) => {
     }
 };
 
-// exports.createProfile = async (req, res, next) => {
-//     try {
-//         const decoded = await promisify(jwt.verify)(
-//             req.body.verifyToken,
-//             process.env.JWT_SECRET
-//         );
-//         if (!decoded.phone) return next(createError.BadRequest('phone.verify'));
+// POST /api/user/enter_details   ("Enter your details" screen)
+// header: token (verify_otp se mila verifyToken)
+// body: name (required), email (optional), fcmToken (optional)
+exports.enterDetails = async (req, res, next) => {
+    try {
+        // 1) Token: header pehle, nahi to body (verifyToken)
+        const rawToken =
+            req.headers.token ||
+            String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') ||
+            req.body.verifyToken;
 
-//         const { city_id, country_id } = req.body;
-//         const [city, country] = await Promise.all([
-//             City.findOne({ city_id }),
-//             Country.findOne({ country_id }),
-//         ]);
+        if (!rawToken) {
+            return next(
+                createError.BadRequest('Token is required. Send the verifyToken from verify_otp in the header "token".')
+            );
+        }
 
-//         // 1. Handle file uploads
-//         const profile = req.files?.profile?.[0] ? `/uploads/${req.files.profile[0].filename}` : undefined;
-//         const licenseFront = req.files?.licenseFront?.[0] ? `/uploads/${req.files.licenseFront[0].filename}` : undefined;
-//         const licenseBack = req.files?.licenseBack?.[0] ? `/uploads/${req.files.licenseBack[0].filename}` : undefined;
+        let decoded;
+        try {
+            decoded = await promisify(jwt.verify)(String(rawToken).trim(), process.env.JWT_SECRET);
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') return next(createError.BadRequest('token.expired'));
+            return next(createError.BadRequest('token.invalid'));
+        }
 
-//         // 2. Create user
-//         let user = new User({
-//             name: req.body.name,
-//             email: req.body.email,
-//             country_code: decoded.country_code,
-//             phone: decoded.phone,
-//             city: city?.id,
-//             country: country?.id,
-//             profile,
-//             licenseFront,
-//             licenseBack,
-//             fcmToken: req.body.fcmToken,
-//         });
+        // Login token bheja ho (verify_otp ka `token`) to saaf message
+        if (!decoded.phone) {
+            return next(
+                createError.BadRequest(
+                    'This is a login token. Use the verifyToken from verify_otp (new number response).'
+                )
+            );
+        }
 
-//         // 3. Create address
-//         const address = new Address({
-//             userId: user.id,
-//             address: req.body.address,
-//             latitude: req.body.latitude,
-//             longitude: req.body.longitude,
-//             selected: true,
-//         });
+        // 2) Name required
+        const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
+        if (!name) return next(createError.BadRequest('Name is required.'));
+        if (name.length < 2) return next(createError.BadRequest('Name is too short.'));
+        if (name.length > 50) return next(createError.BadRequest('Name is too long (max 50 characters).'));
 
-//         // 4. Validate
-//         await user.validate();
-//         await address.validate();
+        // 3) Email OPTIONAL: key na ho, "", spaces, null, "undefined", "null", sab "email nahi diya" maane jayenge
+        let email = req.body.email;
+        email = typeof email === 'string' ? email.trim().toLowerCase() : '';
+        if (['undefined', 'null'].includes(email)) email = '';
 
-//         user.address = address.id;
-//         await Promise.all([user.save(), address.save()]);
+        // Email diya ho tabhi validate karo
+        if (email && !validator.isEmail(email)) {
+            return next(createError.BadRequest('Invalid email address.'));
+        }
 
-//         const token = await user.generateAuthToken();
-//         await user.populate('city country address');
-//         user = multilingualUser(user, req);
+        // 4) Is number ka user pehle se ban chuka ho (double tap / retry) to login karwa do
+        const ccDigits = String(decoded.country_code || '').replace(/\D/g, '');
+        let user = await User.findOne({
+            country_code: { $in: [decoded.country_code, ccDigits, '+' + ccDigits] },
+            phone: String(decoded.phone).trim(),
+        });
 
-//         user.latitude = user.address.latitude;
-//         user.longitude = user.address.longitude;
-//         user.address = user.address.address;
+        if (user) {
+            if (req.body.fcmToken) {
+                user.fcmToken = req.body.fcmToken;
+                await user.save();
+            }
+            const token = await user.generateAuthToken();
+            return res.json({ code: '1', message: req.t('loggedIn'), token, user });
+        }
 
-//         // Hide fields
-//         user.password = undefined;
-//         user.__v = undefined;
+        // 5) Email diya ho tabhi duplicate check
+        if (email) {
+            const emailTaken = await User.findOne({ email }).select('_id');
+            if (emailTaken) {
+                return next(createError.Conflict('This email is already registered.'));
+            }
+        }
 
-//         res.status(201).json({
-//             code: '1',
-//             message: req.t('profile'),
-//             token,
-//             user,
-//         });
+        // 6) Create: email khali ho to field set hi nahi hota (khali string save mat karna)
+        const data = {
+            name,
+            country_code: decoded.country_code,
+            phone: String(decoded.phone).trim(),
+        };
+        if (email) data.email = email;
+        if (req.body.fcmToken) data.fcmToken = req.body.fcmToken;
 
-//     } catch (error) {
-//         // 5. Delete uploaded files on error
-//         const files = [
-//             req.files?.profile?.[0],
-//             req.files?.licenseFront?.[0],
-//             req.files?.licenseBack?.[0]
-//         ].filter(Boolean);
-//         files.forEach(file => deleteFile(file.path));
+        user = await User.create(data);
 
-//         if (error.name === 'JsonWebTokenError')
-//             return next(createError.BadRequest('token.invalid'));
-//         if (error.name === 'TokenExpiredError')
-//             return next(createError.BadRequest('token.expired'));
+        const token = await user.generateAuthToken();
 
-//         next(error);
-//     }
-// };
+        user = user.toObject();
+        user.__v = undefined;
+        user.password = undefined;
+
+        res.status(201).json({
+            code: '1',
+            message: req.t('profile'),
+            token,
+            user,
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyPattern || {})[0] || 'details';
+            return next(createError.Conflict(`This ${field} is already registered.`));
+        }
+        next(error);
+    }
+};
 
 exports.createProfile = async (req, res, next) => {
     try {
@@ -1340,89 +1370,6 @@ exports.socialLogin = async (req, res, next) => {
         next(error);
     }
 };
-
-// exports.createSocialProfile = async (req, res, next) => {
-//     try {
-//         const { city_id, country_id } = req.body;
-//         const [city, country] = await Promise.all([
-//             City.findOne({ city_id }),
-//             Country.findOne({ country_id }),
-//         ]);
-
-//         // 1. Handle file uploads
-//         const profile = req.files?.profile?.[0] ? `/uploads/${req.files.profile[0].filename}` : undefined;
-//         const licenseFront = req.files?.licenseFront?.[0] ? `/uploads/${req.files.licenseFront[0].filename}` : undefined;
-//         const licenseBack = req.files?.licenseBack?.[0] ? `/uploads/${req.files.licenseBack[0].filename}` : undefined;
-
-//         // 2. Create user
-//         let user = new User({
-//             name: req.body.name,
-//             email: req.body.email,
-//             country_code: req.body.country_code,
-//             phone: req.body.phone,
-//             city: city?.id,
-//             country: country?.id,
-//             googleId: req.body.googleId,
-//             facebookId: req.body.facebookId,
-//             appleId: req.body.appleId,
-//             profile,
-//             licenseFront,
-//             licenseBack,
-//             fcmToken: req.body.fcmToken,
-//         });
-
-//         // 3. Create address
-//         const address = new Address({
-//             userId: user.id,
-//             address: req.body.address,
-//             latitude: req.body.latitude,
-//             longitude: req.body.longitude,
-//             selected: true,
-//         });
-
-//         // 4. Validate
-//         await user.validate();
-//         await address.validate();
-
-//         user.address = address.id;
-//         await Promise.all([user.save(), address.save()]);
-
-//         const token = await user.generateAuthToken();
-//         await user.populate('city country address');
-//         user = multilingualUser(user, req);
-
-//         user.latitude = user.address.latitude;
-//         user.longitude = user.address.longitude;
-//         user.address = user.address.address;
-
-//         // Hide fields
-//         user.password = undefined;
-//         user.__v = undefined;
-
-//         res.status(201).json({
-//             code: '1',
-//             message: req.t('profile'),
-//             token,
-//             user,
-//         });
-
-//     } catch (error) {
-//         // 5. Delete uploaded files on error
-//         const files = [
-//             req.files?.profile?.[0],
-//             req.files?.licenseFront?.[0],
-//             req.files?.licenseBack?.[0]
-//         ].filter(Boolean);
-//         files.forEach(file => deleteFile(file.path));
-
-//         if (error.name === 'JsonWebTokenError')
-//             return next(createError.BadRequest('token.invalid'));
-//         if (error.name === 'TokenExpiredError')
-//             return next(createError.BadRequest('token.expired'));
-
-//         next(error);
-//     }
-// };
 
 exports.createSocialProfile = async (req, res, next) => {
     try {
