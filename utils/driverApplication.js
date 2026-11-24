@@ -177,6 +177,7 @@ const notify = async (driverId, title, body, type) => {
 
 const approveDriver = async driverId => {
     const now = new Date();
+
     await Driver.collection.updateOne(
         { _id: toId(driverId) },
         {
@@ -184,12 +185,25 @@ const approveDriver = async driverId => {
             $unset: { resubmission: '', rejectionReason: '' },
         }
     );
-    await notify(
-        driverId,
-        'Congratulations!',
-        `Your ${APP_NAME} Driver application has been approved. You're ready to get started.`,
-        'application_approved'
-    );
+
+    // ---- Notification ----
+    try {
+        const driver = await Driver.findById(driverId).select('fcmToken').lean();
+        if (driver?.fcmToken) {
+            await sendNotification(driver.fcmToken, {
+                driver: String(driverId),
+                title: 'Congratulations!',
+                body: `Your ${APP_NAME} Driver application has been approved. You're ready to get started.`,
+                type: 'application_approved',
+                screen: 'application_status',
+            });
+            console.log(`[APPROVE] notification sent to driver ${driverId}`);
+        } else {
+            console.warn(`[APPROVE] driver ${driverId} ka fcmToken nahi he, notification skip`);
+        }
+    } catch (error) {
+        console.error('[APPROVE] notification failed:', error.code || error.message);
+    }
 };
 
 const requestResubmission = async (driverId, documents = [], reason = '') => {
@@ -198,45 +212,82 @@ const requestResubmission = async (driverId, documents = [], reason = '') => {
         throw new Error(`documents must include at least one of: ${Object.keys(DOC_LABELS).join(', ')}`);
     }
 
+    const cleanReason = String(reason || '').trim();
     const now = new Date();
+
     await Driver.collection.updateOne(
         { _id: toId(driverId) },
         {
             $set: {
+                approved: false, // pehle approved tha to bhi status resubmission_required dikhe
                 applicationStatus: 'resubmission_required',
-                resubmission: { documents: keys, reason: String(reason || '').trim(), requestedAt: now },
+                resubmission: { documents: keys, reason: cleanReason, requestedAt: now },
                 updatedAt: now,
             },
+            $unset: { rejectionReason: '' },
         }
     );
-    await notify(
-        driverId,
-        'Document Resubmission Required',
-        'Some of your documents need to be updated. Please resubmit to continue.',
-        'document_resubmission'
-    );  
+
+    // ---- Notification ----
+    try {
+        const driver = await Driver.findById(driverId).select('fcmToken').lean();
+        if (driver?.fcmToken) {
+            const docNames = keys.map(k => DOC_LABELS[k]).join(', ');
+
+            await sendNotification(driver.fcmToken, {
+                driver: String(driverId),
+                title: 'Document Resubmission Required',
+                body: cleanReason || `Please resubmit: ${docNames}.`,
+                type: 'document_resubmission',
+                screen: 'application_status',
+                documents: keys.join(','), // FCM data me sirf string allowed he
+            });
+            console.log(`[RESUBMIT] notification sent to driver ${driverId}`);
+        } else {
+            console.warn(`[RESUBMIT] driver ${driverId} ka fcmToken nahi he, notification skip`);
+        }
+    } catch (error) {
+        console.error('[RESUBMIT] notification failed:', error.code || error.message);
+    }
 };
 
 const rejectDriver = async (driverId, reason = '') => {
+    const cleanReason = String(reason || '').trim();
     const now = new Date();
+
     await Driver.collection.updateOne(
         { _id: toId(driverId) },
         {
             $set: {
                 approved: false,
                 applicationStatus: 'rejected',
-                rejectionReason: String(reason || '').trim(),
+                rejectionReason: cleanReason,
                 updatedAt: now,
             },
             $unset: { resubmission: '' },
         }
     );
-    await notify(
-        driverId,
-        'Application Update',
-        'Your application could not be approved. Please contact support for details.',
-        'application_rejected'
-    );
+
+    // ---- Notification ----
+    try {
+        const driver = await Driver.findById(driverId).select('fcmToken').lean();
+        if (driver?.fcmToken) {
+            await sendNotification(driver.fcmToken, {
+                driver: String(driverId),
+                title: 'Application Update',
+                body: cleanReason
+                    ? `Your application was not approved. Reason: ${cleanReason}`
+                    : 'Your application could not be approved. Please contact support for details.',
+                type: 'application_rejected',
+                screen: 'application_status',
+            });
+            console.log(`[REJECT] notification sent to driver ${driverId}`);
+        } else {
+            console.warn(`[REJECT] driver ${driverId} ka fcmToken nahi he, notification skip`);
+        }
+    } catch (error) {
+        console.error('[REJECT] notification failed:', error.code || error.message);
+    }
 };
 
 module.exports = {

@@ -297,12 +297,13 @@ const driverSchema = new mongoose.Schema(
         },
         country_code: {
             type: String,
-            required: [true, 'validation.country_code'],
+            trim: true,
+            default: undefined,
         },
         phone: {
             type: String,
-            required: [true, 'validation.phone'],
-            unique: true,
+            trim: true,
+            default: undefined,
         },
         email: {
             type: String,
@@ -502,7 +503,7 @@ const driverSchema = new mongoose.Schema(
                 },
                 verifiedAt: Date,
                 rejectionReason: String,
-                
+
             },
         ],
 

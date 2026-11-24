@@ -1,21 +1,256 @@
+// // const admin = require('firebase-admin');
+
+
+// const Notification = require('../models/notificationModel');
+// const admin = require('./firebase');
+
+// // Initialize the Firebase Admin SDK
+// // const serviceAccount = require('./dynasty-ud-firebase-adminsdk-fx1y8-13482b8643.json');
+// // admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+
+// // At top of sendNotification.js – replace existing init
+
+// if (!admin.apps.length) {
+//     try {
+//         // const serviceAccount = require('./primeride-df400-firebase-adminsdk-fbsvc-483e5c7f80.json');
+
+//         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+
+//         admin.initializeApp({
+//             credential: admin.credential.cert(serviceAccount)
+//         });
+
+//         console.log('╔═══════════════════════════════════════════════╗');
+//         console.log('║     FIREBASE ADMIN SDK INITIALIZED OK        ║');
+//         console.log('║ Project ID:', serviceAccount.project_id, '               ║');
+//         console.log('╚═══════════════════════════════════════════════╝');
+//     } catch (err) {
+//         console.error('╔═══════════════════════════════════════════════╗');
+//         console.error('║   FIREBASE INIT FAILED – KEY PROBLEM          ║');
+//         console.error('║ Error:', err.message);
+//         console.error('╚═══════════════════════════════════════════════╝');
+//     }
+// }
+
+// // const sendNotification = async (registrationToken, data) => {
+// //     const message = {
+// //         notification: { title: data.title, body: data.body },
+// //         token: registrationToken,
+// //     };
+
+// //     try {
+// //         await Notification.create(data);
+
+// //         const response = await admin.messaging().send(message);
+// //         console.log('Successfully sent notification:', response);
+
+// //         return response;
+// //     } catch (error) {
+// //         console.log('Error sending notification:', error);
+// //     }
+// // };
+// const sendNotification = async (registrationToken, data) => {
+//     if (!registrationToken) {
+//         throw new Error('No registration token provided');
+//     }
+
+//     const { title, body, ...restData } = data;
+
+//     const message = {
+//         notification: {
+//             title: title || 'Dynasty Notification',
+//             body: body || 'You have an update'
+//         },
+//         data: {
+//             data: JSON.stringify({
+//                 ...restData,
+//                 type: data.type || 'general',
+//                 timestamp: data.timestamp || new Date().toISOString()
+//             })
+//         },
+//         token: registrationToken,
+//     };
+
+//     try {
+//         await Notification.create(data);
+
+//         const response = await admin.messaging().send(message);
+//         console.log('Successfully sent notification → Message ID:', response);
+//         return response;
+//     } catch (error) {
+//         console.error('FCM send failed:', error.code || error.message);
+//         console.error('Full FCM error:', error);
+//         throw error;
+//     }
+// };
+
+// const sendOnlyNotification = async (registrationToken, data) => {
+//     const message = {
+//         notification: { title: data.title, body: data.body },
+//         token: registrationToken,
+//     };
+
+//     try {
+//         const response = await admin.messaging().send(message);
+//         console.log('Successfully sent notification:', response);
+
+//         return response;
+//     } catch (error) {
+//         console.log('Error sending notification:', error);
+//     }
+// };
+
+// // const sendRideNotification = async (registrationToken, data) => {
+// //     const { title, body, ...restData } = data;
+// //     console.log(
+// //         '================================================================'
+// //     );
+// //     console.log(JSON.stringify(restData));
+// //     console.log(
+// //         '================================================================'
+// //     );
+
+// //     const message = {
+// //         notification: { title: title, body: body },
+// //         // data: restData,
+// //         data: {
+// //             data: JSON.stringify(restData),
+// //         },
+// //         token: registrationToken,
+// //     };
+
+// //     try {
+// //         // await Notification.create(data);
+
+// //         const response = await admin.messaging().send(message);
+// //         console.log('Successfully sent notification:', response);
+
+// //         return response;
+// //     } catch (error) {
+// //         console.log('Error sending notification:', error);
+// //     }
+// // };
+
+// // const sendRideNotification = async (registrationToken, data) => {
+// //     if (!registrationToken) {
+// //         console.warn('No FCM token → skipping ride notification');
+// //         return;
+// //     }
+
+// //     const { title, body, ...restData } = data;
+
+// //     console.log('Sending ride notification to token:', registrationToken.substring(0, 20) + '...');
+
+// //     const message = {
+// //         notification: { title, body },
+// //         data: {
+// //             data: JSON.stringify(restData),
+// //         },
+// //         token: registrationToken,
+// //     };
+
+// //     try {
+// //         const response = await admin.messaging().send(message);
+// //         console.log('Ride notification SUCCESS → messageId:', response);
+// //         // await Notification.create(data); // uncomment when stable
+// //         return response;
+// //     } catch (error) {
+// //         console.error('Ride FCM failed:');
+// //         console.error('→ Code:', error.code);
+// //         console.error('→ Message:', error.message);
+// //         if (error.errorInfo) console.error('→ ErrorInfo:', error.errorInfo);
+// //         throw error;
+// //     }
+// // };
+
+// const sendRideNotification = async (registrationToken, data) => {
+//     if (!registrationToken) {
+//         console.warn('No FCM token → skipping ride notification');
+//         return;
+//     }
+
+//     const { title, body, ...restData } = data;
+
+//     const message = {
+//         notification: { title, body },
+//         data: { data: JSON.stringify(restData) },
+//         token: registrationToken,
+//     };
+
+//     try {
+//         const response = await admin.messaging().send(message);
+//         console.log('Ride notification SUCCESS → messageId:', response);
+
+//         // ✅ पूरा data नहीं — सिर्फ जरूरी fields save करो
+//         const notifData = {
+//             title: title || 'Ride Notification',
+//             body: body || '',
+//         };
+
+//         // ✅ सिर्फ valid ObjectId fields add करो
+//         if (data.user) notifData.user = data.user;
+//         if (data.driver) notifData.driver = data.driver;
+
+//         if (notifData.user || notifData.driver) {
+//             await Notification.create(notifData);
+//             console.log('✅ OnlyNotification saved | user:', notifData.user, '| driver:', notifData.driver);
+//         }
+
+//         // await Notification.create(notifData);
+//         // console.log('✅ Notification saved | user:', notifData.user, '| driver:', notifData.driver);
+
+//         return response;
+//     } catch (error) {
+//         console.error('Ride FCM failed:', error.code, error.message);
+//         throw error;
+//     }
+// };
+
+// module.exports = {
+//     sendNotification,
+//     sendOnlyNotification,
+//     sendRideNotification,
+// };
+
+
+
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 
 const Notification = require('../models/notificationModel');
 
-// Initialize the Firebase Admin SDK
-// const serviceAccount = require('./dynasty-ud-firebase-adminsdk-fx1y8-13482b8643.json');
-// admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+// ================= FIREBASE INIT =================
+// Service account JSON utils folder se padho (naam kuch bhi ho)
+function loadServiceAccount() {
+    // 1) Agar env me JSON diya ho to wahi (production ke liye)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    }
 
-// At top of sendNotification.js – replace existing init
+    // 2) Warna utils folder ki service account file
+    const files = fs.readdirSync(__dirname).filter(f => f.toLowerCase().endsWith('.json'));
+    for (const file of files) {
+        try {
+            const json = JSON.parse(fs.readFileSync(path.join(__dirname, file), 'utf8'));
+            if (json.type === 'service_account' && json.private_key && json.client_email) {
+                console.log(`🔑 Firebase key file mili: utils/${file}`);
+                return json;
+            }
+        } catch (e) {
+            /* ye JSON service account nahi, aage badho */
+        }
+    }
+
+    throw new Error('Firebase service account JSON utils folder me nahi mili.');
+}
 
 if (!admin.apps.length) {
     try {
-        // const serviceAccount = require('./primeride-df400-firebase-adminsdk-fbsvc-483e5c7f80.json');
-
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+        const serviceAccount = loadServiceAccount();
 
         admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
+            credential: admin.credential.cert(serviceAccount),
         });
 
         console.log('╔═══════════════════════════════════════════════╗');
@@ -30,23 +265,7 @@ if (!admin.apps.length) {
     }
 }
 
-// const sendNotification = async (registrationToken, data) => {
-//     const message = {
-//         notification: { title: data.title, body: data.body },
-//         token: registrationToken,
-//     };
-
-//     try {
-//         await Notification.create(data);
-
-//         const response = await admin.messaging().send(message);
-//         console.log('Successfully sent notification:', response);
-
-//         return response;
-//     } catch (error) {
-//         console.log('Error sending notification:', error);
-//     }
-// };
+// ================= SEND NOTIFICATION =================
 const sendNotification = async (registrationToken, data) => {
     if (!registrationToken) {
         throw new Error('No registration token provided');
@@ -57,14 +276,14 @@ const sendNotification = async (registrationToken, data) => {
     const message = {
         notification: {
             title: title || 'Dynasty Notification',
-            body: body || 'You have an update'
+            body: body || 'You have an update',
         },
         data: {
             data: JSON.stringify({
                 ...restData,
                 type: data.type || 'general',
-                timestamp: data.timestamp || new Date().toISOString()
-            })
+                timestamp: data.timestamp || new Date().toISOString(),
+            }),
         },
         token: registrationToken,
     };
@@ -98,69 +317,6 @@ const sendOnlyNotification = async (registrationToken, data) => {
     }
 };
 
-// const sendRideNotification = async (registrationToken, data) => {
-//     const { title, body, ...restData } = data;
-//     console.log(
-//         '================================================================'
-//     );
-//     console.log(JSON.stringify(restData));
-//     console.log(
-//         '================================================================'
-//     );
-
-//     const message = {
-//         notification: { title: title, body: body },
-//         // data: restData,
-//         data: {
-//             data: JSON.stringify(restData),
-//         },
-//         token: registrationToken,
-//     };
-
-//     try {
-//         // await Notification.create(data);
-
-//         const response = await admin.messaging().send(message);
-//         console.log('Successfully sent notification:', response);
-
-//         return response;
-//     } catch (error) {
-//         console.log('Error sending notification:', error);
-//     }
-// };
-
-// const sendRideNotification = async (registrationToken, data) => {
-//     if (!registrationToken) {
-//         console.warn('No FCM token → skipping ride notification');
-//         return;
-//     }
-
-//     const { title, body, ...restData } = data;
-
-//     console.log('Sending ride notification to token:', registrationToken.substring(0, 20) + '...');
-
-//     const message = {
-//         notification: { title, body },
-//         data: {
-//             data: JSON.stringify(restData),
-//         },
-//         token: registrationToken,
-//     };
-
-//     try {
-//         const response = await admin.messaging().send(message);
-//         console.log('Ride notification SUCCESS → messageId:', response);
-//         // await Notification.create(data); // uncomment when stable
-//         return response;
-//     } catch (error) {
-//         console.error('Ride FCM failed:');
-//         console.error('→ Code:', error.code);
-//         console.error('→ Message:', error.message);
-//         if (error.errorInfo) console.error('→ ErrorInfo:', error.errorInfo);
-//         throw error;
-//     }
-// };
-
 const sendRideNotification = async (registrationToken, data) => {
     if (!registrationToken) {
         console.warn('No FCM token → skipping ride notification');
@@ -179,13 +335,13 @@ const sendRideNotification = async (registrationToken, data) => {
         const response = await admin.messaging().send(message);
         console.log('Ride notification SUCCESS → messageId:', response);
 
-        // ✅ पूरा data नहीं — सिर्फ जरूरी fields save करो
+        // Sirf zaroori fields save karo
         const notifData = {
             title: title || 'Ride Notification',
             body: body || '',
         };
 
-        // ✅ सिर्फ valid ObjectId fields add करो
+        // Sirf valid ObjectId fields add karo
         if (data.user) notifData.user = data.user;
         if (data.driver) notifData.driver = data.driver;
 
@@ -193,9 +349,6 @@ const sendRideNotification = async (registrationToken, data) => {
             await Notification.create(notifData);
             console.log('✅ OnlyNotification saved | user:', notifData.user, '| driver:', notifData.driver);
         }
-
-        // await Notification.create(notifData);
-        // console.log('✅ Notification saved | user:', notifData.user, '| driver:', notifData.driver);
 
         return response;
     } catch (error) {
@@ -209,4 +362,3 @@ module.exports = {
     sendOnlyNotification,
     sendRideNotification,
 };
-

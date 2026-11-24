@@ -10,9 +10,18 @@ const City = require('../../models/cityModel');
 exports.getProfile = async (req, res, next) => {
     try {
         await req.driver.populate('city country');
+
+        // multilingualUser se pehle raw values nikal lo
+        const phone = req.driver.phone;
+        const country_code = req.driver.country_code;
+
         const driver = multilingualUser(req.driver, req);
 
-        if (driver.location.coordinates) {
+        // multilingualUser ne drop kar diye hon to wapas daal do
+        driver.phone = driver.phone || phone;
+        driver.country_code = driver.country_code || country_code;
+
+        if (driver.location?.coordinates?.length) {
             driver.latitude = driver.location.coordinates[1];
             driver.longitude = driver.location.coordinates[0];
         }

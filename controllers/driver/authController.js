@@ -796,6 +796,11 @@ exports.sendOTP = async (req, res, next) => {
 exports.verifyOTP = async (req, res, next) => {
     try {
         const { country_code, phone, otp } = req.body;
+
+        if (!country_code || !phone || !otp) {
+            return next(createError.BadRequest('country_code, phone and otp are required.'));
+        }
+
         const mobile = country_code + phone;
 
         const otpVerified = await OTP.findOne({ mobile, otp });
@@ -805,31 +810,36 @@ exports.verifyOTP = async (req, res, next) => {
             .select('-__v')
             .populate('city country');
 
-        // Is number se account nahi he: register karna padega (Personal Information screen)
+        // ---------- Naya number: register screen + verifyToken ----------
         if (!driver) {
+            const verifyToken = jwt.sign(
+                { purpose: 'register', country_code, phone },
+                process.env.JWT_SECRET,
+                { expiresIn: '1d' }
+            );
+
             return res.json({
                 code: '001',
                 message: req.t('otp.verified'),
+                verifyToken,
                 country_code,
                 phone,
             });
         }
 
+        // ---------- Purana driver: login ----------
         driver.isHandlingRequest = false;
         driver.fcmToken = req.body.fcmToken;
         await driver.save();
         const token = await driver.generateAuthToken();
 
-        // application status (doc se nikalo, conversion se pehle)
         const application = buildApplicationInfo(driver);
-
         driver = multilingualUser(driver, req);
 
         if (driver.location?.coordinates) {
             driver.latitude = driver.location.coordinates[1];
             driver.longitude = driver.location.coordinates[0];
         }
-
         driver.location = undefined;
         driver.application = application;
 
@@ -843,7 +853,6 @@ exports.verifyOTP = async (req, res, next) => {
         next(error);
     }
 };
-
 exports.createProfile = async (req, res, next) => {
     try {
         const decoded = await promisify(jwt.verify)(req.body.verifyToken, process.env.JWT_SECRET);
@@ -1507,48 +1516,168 @@ exports.biometricLogin = async (req, res, next) => {
         next(error);
     }
 };
-// ==================== APPLICATION FLOW (Figma screens) ====================
 
 // POST /api/driver/register   (Personal Information screen)
-// form-data: name, email, country_code, phone, address, ssn, fcmToken (optional)
+// form-data: name, email, address, ssn, country_code (optional), phone (optional), fcmToken (optional)
 // files: licence_front, licence_back, profile (optional)
+// exports.registerDriver = async (req, res, next) => {
+//     const files = req.files || {};
+//     const allFiles = Object.values(files).flat();
+//     const url = name => (files[name]?.[0] ? `/uploads/${files[name][0].filename}` : undefined);
+
+//     try {
+//         const name = String(req.body.name || '').trim();
+//         const email = String(req.body.email || '').trim().toLowerCase();
+//         const country_code = String(req.body.country_code || '').trim();
+//         const phone = String(req.body.phone || '').replace(/\D/g, '');
+//         const address = String(req.body.address || '').trim();
+
+//         // ---------- Validation ----------
+//         if (!name) return next(createError.BadRequest('Full name is required.'));
+//         if (!email) return next(createError.BadRequest('Email address is required.'));
+//         if (!validator.isEmail(email)) return next(createError.BadRequest('Invalid email address.'));
+//         if (!address) return next(createError.BadRequest('Address is required.'));
+
+//         // country_code & phone optional, lekin phone diya ho to valid hona chahiye
+//         if (phone && (phone.length < 6 || phone.length > 15)) {
+//             return next(createError.BadRequest('Invalid phone number.'));
+//         }
+
+//         const licenceFront = url('licence_front');
+//         const licenceBack = url('licence_back');
+//         if (!licenceFront || !licenceBack) {
+//             return next(createError.BadRequest('Driving license front and back images are required.'));
+//         }
+
+//         // SSN: validate + bcrypt hash (raw SSN kabhi save/return nahi hota)
+//         const ssn = normalizeSSN(req.body.ssn);
+//         const ssnHash = await hashSSN(ssn);
+
+//         // ---------- Duplicate check (phone sirf tab, jab diya ho) ----------
+//         const orConditions = [{ email }];
+//         if (phone) orConditions.push({ phone });
+
+//         const existing = await Driver.findOne({ $or: orConditions }).select('phone email');
+//         if (existing) {
+//             const field = existing.email === email ? 'email' : 'phone number';
+//             return next(createError.Conflict(`This ${field} is already registered. Please login instead.`));
+//         }
+
+//         // ---------- Create (khali phone/country_code set hi nahi karte) ----------
+//         const data = {
+//             name,
+//             email,
+//             address,
+//             profile: url('profile'),
+//             licence: licenceFront,
+//             licenceBack,
+//             ssnHash,
+//             ssnLast4: ssn.slice(-4),
+//             applicationStatus: 'incomplete', // vehicle info baaki he
+//             fcmToken: req.body.fcmToken || undefined,
+//         };
+//         if (phone) {
+//             data.phone = phone;
+//             if (country_code) data.country_code = country_code;
+//         }
+
+//         let driver = await Driver.create(data);
+
+//         const token = await driver.generateAuthToken();
+
+//         const application = buildApplicationInfo(driver);
+//         driver = multilingualUser(driver, req);
+
+//         driver.password = undefined;
+//         driver.__v = undefined;
+//         driver.location = undefined;
+//         driver.ssnHash = undefined;
+//         driver.application = application;
+
+//         res.status(201).json({
+//             code: '1',
+//             message: req.t('profile'),
+//             token, // aage ke har API ke header `token` me jayega
+//             driver,
+//         });
+//     } catch (error) {
+//         allFiles.forEach(f => deleteFile(f.path));
+
+//         if (error.code === 11000) {
+//             console.error('[register] duplicate key:', error.keyValue);
+
+//             const field = Object.keys(error.keyPattern || {})[0] || 'details';
+
+//             // Phone diya hi nahi aur phir bhi phone duplicate aaya: ye DB index ki dikkat he
+//             if (field === 'phone' && !req.body.phone) {
+//                 return next(
+//                     createError.InternalServerError(
+//                         'Server index issue on phone. Please run the phone index fix script.'
+//                     )
+//                 );
+//             }
+//             return next(createError.Conflict(`This ${field} is already registered. Please login instead.`));
+//         }
+//         next(error);
+//     }
+// };
+
 exports.registerDriver = async (req, res, next) => {
     const files = req.files || {};
     const allFiles = Object.values(files).flat();
     const url = name => (files[name]?.[0] ? `/uploads/${files[name][0].filename}` : undefined);
+    const fail = (err) => {
+        allFiles.forEach(f => deleteFile(f.path));
+        return next(err);
+    };
 
     try {
+        // ---------- Token (body ko priority, phir header) ----------
+        const verifyToken = req.body.verifyToken || req.body.token || req.headers.token;
+        if (!verifyToken) {
+            return fail(createError.BadRequest('verifyToken is missing. Call verify_otp first.'));
+        }
+
+        const decoded = await promisify(jwt.verify)(verifyToken, process.env.JWT_SECRET);
+        console.log('REGISTER decoded:', decoded);
+
+        if (decoded._id) {
+            return fail(createError.BadRequest(
+                'You sent a LOGIN token. This number is already registered, please login instead.'
+            ));
+        }
+        if (decoded.purpose !== 'register' || !decoded.phone) {
+            return fail(createError.BadRequest(
+                `Invalid verifyToken (payload keys: ${Object.keys(decoded).join(', ')}).`
+            ));
+        }
+
+        const { country_code, phone } = decoded;
+
+        // ---------- Body ----------
         const name = String(req.body.name || '').trim();
         const email = String(req.body.email || '').trim().toLowerCase();
-        const country_code = String(req.body.country_code || '').trim();
-        const phone = String(req.body.phone || '').replace(/\D/g, '');
         const address = String(req.body.address || '').trim();
 
-        // ---------- Validation ----------
-        if (!name) return next(createError.BadRequest('Full name is required.'));
-        if (!email) return next(createError.BadRequest('Email address is required.'));
-        if (!validator.isEmail(email)) return next(createError.BadRequest('Invalid email address.'));
-        if (!country_code) return next(createError.BadRequest('Country code is required.'));
-        if (!phone) return next(createError.BadRequest('Phone number is required.'));
-        if (phone.length < 6 || phone.length > 15)
-            return next(createError.BadRequest('Invalid phone number.'));
-        if (!address) return next(createError.BadRequest('Address is required.'));
+        if (!name) return fail(createError.BadRequest('Full name is required.'));
+        if (!email) return fail(createError.BadRequest('Email address is required.'));
+        if (!validator.isEmail(email)) return fail(createError.BadRequest('Invalid email address.'));
+        if (!address) return fail(createError.BadRequest('Address is required.'));
 
         const licenceFront = url('licence_front');
         const licenceBack = url('licence_back');
         if (!licenceFront || !licenceBack) {
-            return next(createError.BadRequest('Driving license front and back images are required.'));
+            return fail(createError.BadRequest('Driving license front and back images are required.'));
         }
 
-        // SSN: validate + bcrypt hash (raw SSN kabhi save/return nahi hota)
         const ssn = normalizeSSN(req.body.ssn);
         const ssnHash = await hashSSN(ssn);
 
-        // ---------- Duplicate check ----------
-        const existing = await Driver.findOne({ $or: [{ phone }, { email }] }).select('phone email');
+        // ---------- Duplicate ----------
+        const existing = await Driver.findOne({ $or: [{ email }, { phone }] }).select('phone email');
         if (existing) {
-            const field = existing.phone === phone ? 'phone number' : 'email';
-            return next(createError.Conflict(`This ${field} is already registered. Please login instead.`));
+            const field = existing.email === email ? 'email' : 'phone number';
+            return fail(createError.Conflict(`This ${field} is already registered. Please login instead.`));
         }
 
         // ---------- Create ----------
@@ -1563,12 +1692,11 @@ exports.registerDriver = async (req, res, next) => {
             licenceBack,
             ssnHash,
             ssnLast4: ssn.slice(-4),
-            applicationStatus: 'incomplete', // vehicle info baaki he
+            applicationStatus: 'incomplete',
             fcmToken: req.body.fcmToken || undefined,
         });
 
         const token = await driver.generateAuthToken();
-
         const application = buildApplicationInfo(driver);
         driver = multilingualUser(driver, req);
 
@@ -1581,17 +1709,19 @@ exports.registerDriver = async (req, res, next) => {
         res.status(201).json({
             code: '1',
             message: req.t('profile'),
-            token, // aage ke har API ke header `token` me jayega
+            token,
             driver,
         });
     } catch (error) {
         allFiles.forEach(f => deleteFile(f.path));
 
+        if (error.name === 'JsonWebTokenError') return next(createError.BadRequest('token.invalid'));
+        if (error.name === 'TokenExpiredError') return next(createError.BadRequest('token.expired'));
+
         if (error.code === 11000) {
+            console.error('[register] duplicate key:', error.keyValue);
             const field = Object.keys(error.keyPattern || {})[0] || 'details';
-            return next(
-                createError.Conflict(`This ${field} is already registered. Please login instead.`)
-            );
+            return next(createError.Conflict(`This ${field} is already registered. Please login instead.`));
         }
         next(error);
     }

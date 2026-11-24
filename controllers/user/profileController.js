@@ -4,25 +4,50 @@ const deleteFile = require('../../utils/deleteFile');
 
 const User = require('../../models/userModel');
 const Address = require('../../models/addressModel');
+const validator = require('validator');
 
+// exports.getProfile = async (req, res, next) => {
+//     try {
+//         await req.user.populate('city country address');
+//         const user = multilingualUser(req.user, req);
+
+//         user.latitude = user.address?.latitude;
+//         user.longitude = user.address?.longitude;
+//         user.address = user.address?.address;
+
+//         // Hide fields
+//         user.blocked = undefined;
+
+//         res.json({ code: '1', message: req.t('success'), user });
+//     } catch (error) {
+//         next(error);
+//     }
+// };
 exports.getProfile = async (req, res, next) => {
     try {
         await req.user.populate('city country address');
-        const user = multilingualUser(req.user, req);
+
+        // multilingualUser se pehle raw values nikal lo
+        const phone = req.user.phone;
+        const country_code = req.user.country_code;
+
+        let user = multilingualUser(req.user, req);
+
+        user.phone = user.phone || phone;
+        user.country_code = user.country_code || country_code;
 
         user.latitude = user.address?.latitude;
         user.longitude = user.address?.longitude;
         user.address = user.address?.address;
 
-        // Hide fields
-        user.blocked = undefined;
+        user.password = undefined;
+        user.__v = undefined;
 
         res.json({ code: '1', message: req.t('success'), user });
     } catch (error) {
         next(error);
     }
 };
-
 // exports.editProfile = async (req, res, next) => {
 //     try {
 //         // 1. Remove disallowed properties
@@ -94,8 +119,18 @@ exports.getProfile = async (req, res, next) => {
 //         next(error);
 //     }
 // };
-
 exports.editProfile = async (req, res, next) => {
+    // Error par upload hui files hata do
+    const cleanupFiles = () => {
+        [
+            req.files?.profile?.[0],
+            req.files?.licenseFront?.[0],
+            req.files?.licenseBack?.[0],
+        ]
+            .filter(Boolean)
+            .forEach(file => deleteFile(file.path));
+    };
+
     try {
         // 1. Remove disallowed properties
         const disallowedProperties = [
@@ -110,9 +145,40 @@ exports.editProfile = async (req, res, next) => {
         ];
         disallowedProperties.forEach(prop => delete req.body[prop]);
 
-        // ========== GENDER FIX START ==========
-        console.log('Original gender from body:', req.body.gender); // debug
+        // ========== EMAIL (optional) ==========
+        if (req.body.email !== undefined) {
+            const email = String(req.body.email).trim().toLowerCase();
 
+            if (!email) {
+                // khali bheja to ignore karo
+                delete req.body.email;
+            } else {
+                if (!validator.isEmail(email)) {
+                    cleanupFiles();
+                    return next(createError.BadRequest('Invalid email address.'));
+                }
+
+                // Same email ho to duplicate check skip
+                if (email !== req.user.email) {
+                    const emailTaken = await User.findOne({
+                        email,
+                        _id: { $ne: req.user.id },
+                    }).select('_id');
+
+                    if (emailTaken) {
+                        cleanupFiles();
+                        return next(
+                            createError.Conflict('This email is already registered.')
+                        );
+                    }
+                }
+
+                req.body.email = email;
+            }
+        }
+        // ========== EMAIL END ==========
+
+        // ========== GENDER FIX START ==========
         if (req.body.gender) {
             const g = String(req.body.gender).toLowerCase().trim();
 
@@ -123,11 +189,10 @@ exports.editProfile = async (req, res, next) => {
             } else if (g === 'other') {
                 req.body.gender = 'Other';
             } else {
+                cleanupFiles();
                 return next(createError.BadRequest('Invalid gender. Allowed: Male, Female, Other'));
             }
         }
-
-        console.log('Gender after capitalize:', req.body.gender); // debug
         // ========== GENDER FIX END ==========
 
         // 2. Handle file uploads
@@ -147,17 +212,12 @@ exports.editProfile = async (req, res, next) => {
         // 3. Update user
         let user = await User.findByIdAndUpdate(
             req.user.id,
-            { $set: req.body },          // ← $set use kiya
+            { $set: req.body },
             { new: true, runValidators: true }
         ).populate('city country address');
 
         if (!user) {
-            const files = [
-                req.files?.profile?.[0],
-                req.files?.licenseFront?.[0],
-                req.files?.licenseBack?.[0]
-            ].filter(Boolean);
-            files.forEach(file => deleteFile(file.path));
+            cleanupFiles();
             return next(createError.NotFound('User not found'));
         }
 
@@ -171,19 +231,16 @@ exports.editProfile = async (req, res, next) => {
         user.__v = undefined;
 
         res.json({ code: '1', message: req.t('success'), user });
-
     } catch (error) {
-        const files = [
-            req.files?.profile?.[0],
-            req.files?.licenseFront?.[0],
-            req.files?.licenseBack?.[0]
-        ].filter(Boolean);
-        files.forEach(file => deleteFile(file.path));
+        cleanupFiles();
 
+        // Race condition: do requests ek saath same email le len
+        if (error.code === 11000) {
+            return next(createError.Conflict('This email is already registered.'));
+        }
         next(error);
     }
 };
-
 // exports.deleteProfile = async (req, res, next) => {
 //     try {
 //         // TODO soft delete
